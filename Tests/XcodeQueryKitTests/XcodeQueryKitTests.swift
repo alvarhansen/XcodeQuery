@@ -15,10 +15,10 @@ final class XcodeQueryKitTests: XCTestCase {
             basePath: Path(tmp.path),
             name: "Sample",
             targets: [
-                Target(name: "App", type: .application, platform: .iOS),
-                Target(name: "AppTests", type: .unitTestBundle, platform: .iOS),
-                Target(name: "AppUITests", type: .uiTestBundle, platform: .iOS),
                 Target(name: "Lib", type: .framework, platform: .iOS),
+                Target(name: "App", type: .application, platform: .iOS, dependencies: [Dependency(type: .target, reference: "Lib")]),
+                Target(name: "AppTests", type: .unitTestBundle, platform: .iOS, dependencies: [Dependency(type: .target, reference: "App")]),
+                Target(name: "AppUITests", type: .uiTestBundle, platform: .iOS, dependencies: [Dependency(type: .target, reference: "App")]),
             ]
         )
         let generator = ProjectGenerator(project: project)
@@ -56,6 +56,42 @@ final class XcodeQueryKitTests: XCTestCase {
             let data = try JSONEncoder().encode(any)
             let results = try JSONDecoder().decode([XcodeQueryKit.Target].self, from: data)
             XCTAssertEqual(results.map { $0.type }, Array(repeating: XcodeQueryKit.TargetType.unitTest, count: results.count))
+        }
+
+        // dependencies(App) -> [Lib]
+        do {
+            let any = try qp.evaluate(query: ".dependencies(\"App\")")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.Target].self, from: data)
+            let names = Set(results.map { $0.name })
+            XCTAssertEqual(names, ["Lib"])
+        }
+
+        // dependencies(AppTests, recursive: true) -> [App, Lib]
+        do {
+            let any = try qp.evaluate(query: ".dependencies(\"AppTests\", recursive: true)")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.Target].self, from: data)
+            let names = Set(results.map { $0.name })
+            XCTAssertEqual(names, ["App", "Lib"])
+        }
+
+        // dependents(Lib) -> [App]
+        do {
+            let any = try qp.evaluate(query: ".dependents(\"Lib\")")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.Target].self, from: data)
+            let names = Set(results.map { $0.name })
+            XCTAssertEqual(names, ["App"])
+        }
+
+        // dependents(Lib, recursive: true) -> [App, AppTests, AppUITests]
+        do {
+            let any = try qp.evaluate(query: ".dependents(\"Lib\", recursive: true)")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.Target].self, from: data)
+            let names = Set(results.map { $0.name })
+            XCTAssertEqual(names, ["App", "AppTests", "AppUITests"])
         }
     }
 }

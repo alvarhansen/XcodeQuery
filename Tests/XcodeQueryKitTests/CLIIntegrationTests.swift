@@ -14,9 +14,10 @@ final class CLIIntegrationTests: XCTestCase {
             basePath: Path(tmp.path),
             name: "Sample",
             targets: [
-                Target(name: "App", type: .application, platform: .iOS),
-                Target(name: "AppTests", type: .unitTestBundle, platform: .iOS),
                 Target(name: "Lib", type: .framework, platform: .iOS),
+                Target(name: "App", type: .application, platform: .iOS, dependencies: [Dependency(type: .target, reference: "Lib")]),
+                Target(name: "AppTests", type: .unitTestBundle, platform: .iOS, dependencies: [Dependency(type: .target, reference: "App")]),
+                Target(name: "AppUITests", type: .uiTestBundle, platform: .iOS, dependencies: [Dependency(type: .target, reference: "App")]),
             ]
         )
         let generator = ProjectGenerator(project: project)
@@ -39,6 +40,35 @@ final class CLIIntegrationTests: XCTestCase {
         XCTAssertTrue(names.contains("App"))
         XCTAssertTrue(names.contains("AppTests"))
         XCTAssertTrue(names.contains("Lib"))
+
+        // Also verify dependencies(App) -> [Lib]
+        let (status2, stdout2, stderr2) = try Self.run(process: xqPath, args: [".dependencies(\"App\")", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status2 != 0 {
+            XCTFail("xq deps failed (\(status2)): \nSTDERR: \(stderr2)\nSTDOUT: \(stdout2)")
+            return
+        }
+        struct Dep: Decodable { let name: String }
+        let depData = stdout2.data(using: String.Encoding.utf8)!
+        let deps = try JSONDecoder().decode([Dep].self, from: depData)
+        XCTAssertEqual(Set(deps.map { $0.name }), ["Lib"])
+
+        // dependencies(AppTests, recursive: true) -> [App, Lib]
+        let (status3, stdout3, stderr3) = try Self.run(process: xqPath, args: [".dependencies(\"AppTests\", recursive: true)", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status3 != 0 { XCTFail("xq deps recursive failed (\(status3)):\nSTDERR: \(stderr3)\nSTDOUT: \(stdout3)"); return }
+        let depsRec = try JSONDecoder().decode([Dep].self, from: stdout3.data(using: .utf8)!)
+        XCTAssertEqual(Set(depsRec.map { $0.name }), ["App", "Lib"])
+
+        // dependents(Lib) -> [App]
+        let (status4, stdout4, stderr4) = try Self.run(process: xqPath, args: [".dependents(\"Lib\")", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status4 != 0 { XCTFail("xq dependents failed (\(status4)):\nSTDERR: \(stderr4)\nSTDOUT: \(stdout4)"); return }
+        let depsDir = try JSONDecoder().decode([Dep].self, from: stdout4.data(using: .utf8)!)
+        XCTAssertEqual(Set(depsDir.map { $0.name }), ["App"])
+
+        // dependents(Lib, recursive: true) -> [App, AppTests, AppUITests]
+        let (status5, stdout5, stderr5) = try Self.run(process: xqPath, args: [".dependents(\"Lib\", recursive: true)", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status5 != 0 { XCTFail("xq dependents recursive failed (\(status5)):\nSTDERR: \(stderr5)\nSTDOUT: \(stdout5)"); return }
+        let depsRec2 = try JSONDecoder().decode([Dep].self, from: stdout5.data(using: .utf8)!)
+        XCTAssertEqual(Set(depsRec2.map { $0.name }), ["App", "AppTests", "AppUITests"])
     }
 
     // MARK: - Helpers
