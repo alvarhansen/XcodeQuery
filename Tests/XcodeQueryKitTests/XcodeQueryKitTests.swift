@@ -160,6 +160,24 @@ final class XcodeQueryKitTests: XCTestCase {
             let results = try JSONDecoder().decode([XcodeQueryKit.SourceEntry].self, from: data)
             XCTAssertTrue(results.contains(where: { $0.target == "Lib" && $0.path.contains("LibFile.swift") }))
         }
+
+        // sources(App, pathMode: "absolute") -> absolute path endswith AppFile.swift
+        do {
+            let any = try qp.evaluate(query: ".sources(\"App\", pathMode: \"absolute\")")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.SourceEntry].self, from: data)
+            XCTAssertTrue(results.allSatisfy { $0.path.hasPrefix("/") })
+            XCTAssertTrue(results.contains(where: { $0.path.hasSuffix("AppFile.swift") }))
+        }
+
+        // pipeline: frameworks | sources(pathMode: "normalized") -> relative paths like Lib/Sources/LibFile.swift
+        do {
+            let any = try qp.evaluate(query: ".targets[] | filter(.type == .framework) | sources(pathMode: \"normalized\")")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.SourceEntry].self, from: data)
+            XCTAssertTrue(results.allSatisfy { !$0.path.hasPrefix("/") })
+            XCTAssertTrue(results.contains(where: { $0.path.contains("Lib/Sources/LibFile.swift") }))
+        }
     }
 }
 

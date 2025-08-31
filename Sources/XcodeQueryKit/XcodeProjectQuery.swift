@@ -1,3 +1,4 @@
+import Foundation
 import XcodeProj
 
 public class XcodeProjectQuery {
@@ -47,7 +48,7 @@ public class XcodeProjectQuery {
                     var out: [SourceEntry] = []
                     for t in current {
                         if let nt = proj.pbxproj.nativeTargets.first(where: { $0.name == t.name }) {
-                            for s in Self.sourceFiles(for: nt) {
+                            for s in Self.sourceFiles(for: nt, mode: op.pathMode ?? .fileRef, projectPath: projectPath) {
                                 let key = "\(t.name)\n\(s)"
                                 if uniq.insert(key).inserted {
                                     out.append(SourceEntry(target: t.name, path: s))
@@ -102,11 +103,11 @@ public class XcodeProjectQuery {
             return AnyEncodable(results)
         }
 
-        if let name = Self.extractSourcesCall(from: query) {
-            guard let base = proj.pbxproj.nativeTargets.first(where: { $0.name == name }) else {
-                throw Error.invalidQuery("Unknown target: \(name)")
+        if let sc = Self.extractSourcesCall(from: query) {
+            guard let base = proj.pbxproj.nativeTargets.first(where: { $0.name == sc.name }) else {
+                throw Error.invalidQuery("Unknown target: \(sc.name)")
             }
-            let paths = Self.sourceFiles(for: base)
+            let paths = Self.sourceFiles(for: base, mode: sc.mode, projectPath: projectPath)
             let out = paths.map { SourceEntry(target: base.name, path: $0) }
             return AnyEncodable(out)
         }
@@ -179,6 +180,18 @@ extension XcodeProjectQuery {
         enum Kind { case dependencies, dependents, sources }
         let kind: Kind
         let recursive: Bool
+        let pathMode: PathMode?
+        init(kind: Kind, recursive: Bool = false, pathMode: PathMode? = nil) {
+            self.kind = kind
+            self.recursive = recursive
+            self.pathMode = pathMode
+        }
+    }
+
+    enum PathMode: String {
+        case fileRef
+        case absolute
+        case normalized
     }
     private static func extractFilterPredicate(from query: String) -> String? {
         // Accept forms like: ".targets[] | filter(<predicate>)"
@@ -227,16 +240,44 @@ extension XcodeProjectQuery {
         throw Error.invalidQuery(predicate)
     }
 
-    fileprivate static func sourceFiles(for target: PBXNativeTarget) -> [String] {
+    fileprivate static func sourceFiles(for target: PBXNativeTarget, mode: PathMode, projectPath: String) -> [String] {
         let phases = target.buildPhases.compactMap { $0 as? PBXSourcesBuildPhase }
         var results: [String] = []
+        let projDirURL = URL(fileURLWithPath: projectPath).deletingLastPathComponent()
+        let projectRoot = projDirURL.path
         for p in phases {
             for f in p.files ?? [] {
                 if let fr = f.file as? PBXFileReference {
-                    if let path = fr.path {
-                        results.append(path)
-                    } else if let name = fr.name {
-                        results.append(name)
+                    let ref = fr.path ?? fr.name ?? ""
+                    switch mode {
+                    case .fileRef:
+                        results.append(ref)
+                    case .absolute:
+                        if let fullStr = (try? fr.fullPath(sourceRoot: projectRoot)) ?? nil {
+                            results.append(fullStr)
+                        } else if ref.hasPrefix("/") {
+                            results.append(ref)
+                        } else {
+                            // Assume relative to project root
+                            results.append(projDirURL.appendingPathComponent(ref).path)
+                        }
+                    case .normalized:
+                        if let fullStr = (try? fr.fullPath(sourceRoot: projectRoot)) ?? nil {
+                            if fullStr.hasPrefix(projectRoot + "/") {
+                                results.append(String(fullStr.dropFirst(projectRoot.count + 1)))
+                            } else {
+                                results.append(fullStr)
+                            }
+                        } else if ref.hasPrefix("/") {
+                            if ref.hasPrefix(projectRoot + "/") {
+                                results.append(String(ref.dropFirst(projectRoot.count + 1)))
+                            } else {
+                                results.append(ref)
+                            }
+                        } else {
+                            // Already relative; assume relative to project root
+                            results.append(ref)
+                        }
                     }
                 }
             }
@@ -309,8 +350,8 @@ extension XcodeProjectQuery {
                 let recursive = parseOptionalRecursive(tok)
                 op = PipelineOp(kind: .dependents, recursive: recursive)
             } else if tok == "sources" || tok.hasPrefix("sources(") {
-                // sources has no recursive option; ignore any args
-                op = PipelineOp(kind: .sources, recursive: false)
+                let mode = parseSourcesMode(tok)
+                op = PipelineOp(kind: .sources, recursive: false, pathMode: mode)
             } else if tok.isEmpty { continue } else {
                 // unknown token, bail
                 return nil
@@ -336,9 +377,45 @@ extension XcodeProjectQuery {
         return nil
     }
 
-    fileprivate static func extractSourcesCall(from query: String) -> String? {
-        guard let v = extractFunctionArgs(from: query, function: ".sources") else { return nil }
-        return v.name
+    fileprivate static func extractSourcesCall(from query: String) -> (name: String, mode: PathMode)? {
+        // Accept: .sources("Name") or .sources("Name", pathMode: "absolute")
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix(".sources(") && trimmed.hasSuffix(")") else { return nil }
+        let inner = trimmed.dropFirst(".sources(".count).dropLast()
+        let items = inner.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: true)
+        guard let first = items.first else { return nil }
+        let name = stripQuotes(String(first).trimmingCharacters(in: .whitespaces))
+        var mode: PathMode = .fileRef
+        if items.count == 2 {
+            let arg = String(items[1]).trimmingCharacters(in: .whitespaces)
+            if let parsed = parsePathMode(from: arg) { mode = parsed }
+        }
+        return (name: name, mode: mode)
+    }
+
+    private static func parseSourcesMode(_ token: String) -> PathMode? {
+        // token is either "sources" or "sources(pathMode: "...")"
+        guard let open = token.firstIndex(of: "(") else { return nil }
+        guard token.hasSuffix(")") else { return nil }
+        let inner = token[token.index(after: open)..<token.index(before: token.endIndex)]
+        return parsePathMode(from: String(inner))
+    }
+
+    private static func parsePathMode(from arg: String) -> PathMode? {
+        // Accept pathMode: "absolute" | "normalized" | "fileRef"
+        let cleaned: String
+        if let range = arg.range(of: "pathMode") {
+            let rhs = arg[range.upperBound...]
+            if let eq = rhs.firstIndex(where: { $0 == ":" || $0 == "=" }) {
+                let value = rhs[rhs.index(after: eq)...].trimmingCharacters(in: .whitespaces)
+                cleaned = stripQuotes(String(value))
+            } else {
+                return nil
+            }
+        } else {
+            cleaned = stripQuotes(arg.trimmingCharacters(in: .whitespaces))
+        }
+        return PathMode(rawValue: cleaned)
     }
 
     private static func extractFunctionArgs(from query: String, function: String) -> (name: String, recursive: Bool)? {
