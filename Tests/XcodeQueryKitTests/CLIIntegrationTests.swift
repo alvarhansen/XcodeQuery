@@ -15,13 +15,15 @@ final class CLIIntegrationTests: XCTestCase {
         try "// lib".write(toFile: tmp.path + "/Lib/Sources/LibFile.swift", atomically: true, encoding: .utf8)
         try FileManager.default.createDirectory(atPath: tmp.path + "/App/Sources", withIntermediateDirectories: true)
         try "// app".write(toFile: tmp.path + "/App/Sources/AppFile.swift", atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(atPath: tmp.path + "/Shared", withIntermediateDirectories: true)
+        try "// shared".write(toFile: tmp.path + "/Shared/Shared.swift", atomically: true, encoding: .utf8)
 
         let project = Project(
             basePath: Path(tmp.path),
             name: "Sample",
             targets: [
-                Target(name: "Lib", type: .framework, platform: .iOS, sources: [TargetSource(path: "Lib/Sources")]),
-                Target(name: "App", type: .application, platform: .iOS, sources: [TargetSource(path: "App/Sources")], dependencies: [Dependency(type: .target, reference: "Lib")]),
+                Target(name: "Lib", type: .framework, platform: .iOS, sources: [TargetSource(path: "Lib/Sources"), TargetSource(path: "Shared/Shared.swift")]),
+                Target(name: "App", type: .application, platform: .iOS, sources: [TargetSource(path: "App/Sources"), TargetSource(path: "Shared/Shared.swift")], dependencies: [Dependency(type: .target, reference: "Lib")]),
                 Target(name: "AppTests", type: .unitTestBundle, platform: .iOS, dependencies: [Dependency(type: .target, reference: "App")]),
                 Target(name: "AppUITests", type: .uiTestBundle, platform: .iOS, dependencies: [Dependency(type: .target, reference: "App")]),
             ]
@@ -106,6 +108,22 @@ final class CLIIntegrationTests: XCTestCase {
         if status11 != 0 { XCTFail("xq sources pipeline failed (\(status11)):\nSTDERR: \(stderr11)\nSTDOUT: \(stdout11)"); return }
         let sourcesPipeOut = try JSONDecoder().decode([Src].self, from: stdout11.data(using: .utf8)!)
         XCTAssertTrue(sourcesPipeOut.contains(where: { $0.target == "Lib" && $0.path.contains("LibFile.swift") }))
+
+        // targetMembership direct for Lib file
+        let (status12, stdout12, stderr12) = try Self.run(process: xqPath, args: [".targetMembership(\"Lib/Sources/LibFile.swift\", pathMode: \"normalized\")", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status12 != 0 { XCTFail("xq targetMembership failed (\(status12)):\nSTDERR: \(stderr12)\nSTDOUT: \(stdout12)"); return }
+        struct Member: Decodable { let path: String; let targets: [String] }
+        let memberOut = try JSONDecoder().decode(Member.self, from: stdout12.data(using: .utf8)!)
+        XCTAssertEqual(memberOut.path, "Lib/Sources/LibFile.swift")
+        XCTAssertEqual(Set(memberOut.targets), ["Lib"])
+
+        // pipeline targetMembership, ensure Shared.swift has 2 owners
+        let (status13, stdout13, stderr13) = try Self.run(process: xqPath, args: [".targets[] | sources(pathMode: \"normalized\") | targetMembership", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status13 != 0 { XCTFail("xq pipeline targetMembership failed (\(status13)):\nSTDERR: \(stderr13)\nSTDOUT: \(stdout13)"); return }
+        let pipelineMembers = try JSONDecoder().decode([Member].self, from: stdout13.data(using: .utf8)!)
+        let shared = pipelineMembers.first { $0.path.contains("Shared/Shared.swift") }
+        XCTAssertNotNil(shared)
+        XCTAssertEqual(Set(shared!.targets), ["App", "Lib"])
 
         // reverseDependencies alias should work the same
         let (status7, stdout7, stderr7) = try Self.run(process: xqPath, args: [".reverseDependencies(\"Lib\")", "--project", projPath.string], workingDirectory: Self.packageRoot())
