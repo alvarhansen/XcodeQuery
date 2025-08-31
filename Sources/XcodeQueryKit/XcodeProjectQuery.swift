@@ -245,6 +245,7 @@ extension XcodeProjectQuery {
         var results: [String] = []
         let projDirURL = URL(fileURLWithPath: projectPath).deletingLastPathComponent()
         let projectRoot = projDirURL.path
+        let stdProjectRoot = URL(fileURLWithPath: projectRoot).standardizedFileURL.path
         for p in phases {
             for f in p.files ?? [] {
                 if let fr = f.file as? PBXFileReference {
@@ -254,29 +255,38 @@ extension XcodeProjectQuery {
                         results.append(ref)
                     case .absolute:
                         if let fullStr = (try? fr.fullPath(sourceRoot: projectRoot)) ?? nil {
-                            results.append(fullStr)
+                            let stdFull = URL(fileURLWithPath: fullStr).standardizedFileURL.path
+                            results.append(stdFull)
                         } else if ref.hasPrefix("/") {
-                            results.append(ref)
+                            results.append(URL(fileURLWithPath: ref).standardizedFileURL.path)
                         } else {
                             // Assume relative to project root
-                            results.append(projDirURL.appendingPathComponent(ref).path)
+                            let abs = projDirURL.appendingPathComponent(ref).standardizedFileURL.path
+                            results.append(abs)
                         }
                     case .normalized:
                         if let fullStr = (try? fr.fullPath(sourceRoot: projectRoot)) ?? nil {
-                            if fullStr.hasPrefix(projectRoot + "/") {
-                                results.append(String(fullStr.dropFirst(projectRoot.count + 1)))
+                            let stdFull = URL(fileURLWithPath: fullStr).standardizedFileURL.path
+                            if stdFull.hasPrefix(stdProjectRoot + "/") {
+                                results.append(String(stdFull.dropFirst(stdProjectRoot.count + 1)))
                             } else {
-                                results.append(fullStr)
+                                results.append(stdFull)
                             }
                         } else if ref.hasPrefix("/") {
-                            if ref.hasPrefix(projectRoot + "/") {
-                                results.append(String(ref.dropFirst(projectRoot.count + 1)))
+                            let stdRef = URL(fileURLWithPath: ref).standardizedFileURL.path
+                            if stdRef.hasPrefix(stdProjectRoot + "/") {
+                                results.append(String(stdRef.dropFirst(stdProjectRoot.count + 1)))
                             } else {
-                                results.append(ref)
+                                results.append(stdRef)
                             }
                         } else {
                             // Already relative; assume relative to project root
-                            results.append(ref)
+                            let rel = URL(fileURLWithPath: ref, relativeTo: projDirURL).standardizedFileURL.path
+                            if rel.hasPrefix(stdProjectRoot + "/") {
+                                results.append(String(rel.dropFirst(stdProjectRoot.count + 1)))
+                            } else {
+                                results.append(ref)
+                            }
                         }
                     }
                 }

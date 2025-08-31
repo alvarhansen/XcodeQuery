@@ -177,6 +177,7 @@ final class XcodeQueryKitTests: XCTestCase {
             let results = try JSONDecoder().decode([XcodeQueryKit.SourceEntry].self, from: data)
             XCTAssertTrue(results.allSatisfy { !$0.path.hasPrefix("/") })
             XCTAssertTrue(results.contains(where: { $0.path.contains("Lib/Sources/LibFile.swift") }))
+            XCTAssertFalse(results.contains(where: { $0.path.hasPrefix("./") }))
         }
     }
 }
