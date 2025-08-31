@@ -10,12 +10,18 @@ final class CLIIntegrationTests: XCTestCase {
         let tmp = try Temporary.makeTempDir()
         let projPath = Path(tmp.path) + "Sample.xcodeproj"
 
+        // Create some source files
+        try FileManager.default.createDirectory(atPath: tmp.path + "/Lib/Sources", withIntermediateDirectories: true)
+        try "// lib".write(toFile: tmp.path + "/Lib/Sources/LibFile.swift", atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(atPath: tmp.path + "/App/Sources", withIntermediateDirectories: true)
+        try "// app".write(toFile: tmp.path + "/App/Sources/AppFile.swift", atomically: true, encoding: .utf8)
+
         let project = Project(
             basePath: Path(tmp.path),
             name: "Sample",
             targets: [
-                Target(name: "Lib", type: .framework, platform: .iOS),
-                Target(name: "App", type: .application, platform: .iOS, dependencies: [Dependency(type: .target, reference: "Lib")]),
+                Target(name: "Lib", type: .framework, platform: .iOS, sources: [TargetSource(path: "Lib/Sources")]),
+                Target(name: "App", type: .application, platform: .iOS, sources: [TargetSource(path: "App/Sources")], dependencies: [Dependency(type: .target, reference: "Lib")]),
                 Target(name: "AppTests", type: .unitTestBundle, platform: .iOS, dependencies: [Dependency(type: .target, reference: "App")]),
                 Target(name: "AppUITests", type: .uiTestBundle, platform: .iOS, dependencies: [Dependency(type: .target, reference: "App")]),
             ]
@@ -87,6 +93,19 @@ final class CLIIntegrationTests: XCTestCase {
         if status9 != 0 { XCTFail("xq pipeline dependents recursive failed (\(status9)):\nSTDERR: \(stderr9)\nSTDOUT: \(stdout9)"); return }
         let depsPipeDepsRec = try JSONDecoder().decode([Dep].self, from: stdout9.data(using: .utf8)!)
         XCTAssertEqual(Set(depsPipeDepsRec.map { $0.name }), ["App", "AppTests", "AppUITests"])
+
+        // sources(App) -> includes AppFile.swift
+        let (status10, stdout10, stderr10) = try Self.run(process: xqPath, args: [".sources(\"App\")", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status10 != 0 { XCTFail("xq sources failed (\(status10)):\nSTDERR: \(stderr10)\nSTDOUT: \(stdout10)"); return }
+        struct Src: Decodable { let target: String; let path: String }
+        let sourcesOut = try JSONDecoder().decode([Src].self, from: stdout10.data(using: .utf8)!)
+        XCTAssertTrue(sourcesOut.contains(where: { $0.target == "App" && $0.path.contains("AppFile.swift") }))
+
+        // pipeline: .targets[] | filter(.type == .framework) | sources -> includes LibFile.swift
+        let (status11, stdout11, stderr11) = try Self.run(process: xqPath, args: [".targets[] | filter(.type == .framework) | sources", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status11 != 0 { XCTFail("xq sources pipeline failed (\(status11)):\nSTDERR: \(stderr11)\nSTDOUT: \(stdout11)"); return }
+        let sourcesPipeOut = try JSONDecoder().decode([Src].self, from: stdout11.data(using: .utf8)!)
+        XCTAssertTrue(sourcesPipeOut.contains(where: { $0.target == "Lib" && $0.path.contains("LibFile.swift") }))
 
         // reverseDependencies alias should work the same
         let (status7, stdout7, stderr7) = try Self.run(process: xqPath, args: [".reverseDependencies(\"Lib\")", "--project", projPath.string], workingDirectory: Self.packageRoot())

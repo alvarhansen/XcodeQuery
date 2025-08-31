@@ -11,12 +11,18 @@ final class XcodeQueryKitTests: XCTestCase {
         let xcodeprojPath = Path(tmp.path) + "Sample.xcodeproj"
 
         // 2) Build a ProjectSpec model programmatically and generate .xcodeproj via XcodeGenKit
+        // Create some source files for targets
+        try FileManager.default.createDirectory(atPath: tmp.path + "/Lib/Sources", withIntermediateDirectories: true)
+        try "// lib".write(toFile: tmp.path + "/Lib/Sources/LibFile.swift", atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(atPath: tmp.path + "/App/Sources", withIntermediateDirectories: true)
+        try "// app".write(toFile: tmp.path + "/App/Sources/AppFile.swift", atomically: true, encoding: .utf8)
+
         let project = Project(
             basePath: Path(tmp.path),
             name: "Sample",
             targets: [
-                Target(name: "Lib", type: .framework, platform: .iOS),
-                Target(name: "App", type: .application, platform: .iOS, dependencies: [Dependency(type: .target, reference: "Lib")]),
+                Target(name: "Lib", type: .framework, platform: .iOS, sources: [TargetSource(path: "Lib/Sources")]),
+                Target(name: "App", type: .application, platform: .iOS, sources: [TargetSource(path: "App/Sources")], dependencies: [Dependency(type: .target, reference: "Lib")]),
                 Target(name: "AppTests", type: .unitTestBundle, platform: .iOS, dependencies: [Dependency(type: .target, reference: "App")]),
                 Target(name: "AppUITests", type: .uiTestBundle, platform: .iOS, dependencies: [Dependency(type: .target, reference: "App")]),
             ]
@@ -137,6 +143,22 @@ final class XcodeQueryKitTests: XCTestCase {
             let results = try JSONDecoder().decode([XcodeQueryKit.Target].self, from: data)
             let names = Set(results.map { $0.name })
             XCTAssertEqual(names, ["App", "AppTests", "AppUITests"])
+        }
+
+        // sources(App) -> one entry pointing to AppFile.swift
+        do {
+            let any = try qp.evaluate(query: ".sources(\"App\")")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.SourceEntry].self, from: data)
+            XCTAssertTrue(results.contains(where: { $0.target == "App" && $0.path.contains("AppFile.swift") }))
+        }
+
+        // pipeline: .targets[] | filter(.type == .framework) | sources -> includes LibFile.swift
+        do {
+            let any = try qp.evaluate(query: ".targets[] | filter(.type == .framework) | sources")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.SourceEntry].self, from: data)
+            XCTAssertTrue(results.contains(where: { $0.target == "Lib" && $0.path.contains("LibFile.swift") }))
         }
     }
 }

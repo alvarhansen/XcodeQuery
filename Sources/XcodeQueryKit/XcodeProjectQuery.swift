@@ -28,6 +28,8 @@ public class XcodeProjectQuery {
         // - .targets[] | filter(.type == .unitTest)
         // - .targets[] | filter(...) | dependencies(recursive: true)
         // - .targets[] | dependencies
+        // - .sources("TargetName")
+        // - .targets[] | filter(...) | sources
         if query == ".targets" || query == ".targets[]" {
             return AnyEncodable(targets)
         }
@@ -39,24 +41,43 @@ public class XcodeProjectQuery {
                 current = try Self.apply(predicate: pred, to: current)
             }
             if let op = pipeline.operation {
-                let graph = DependencyGraph(project: proj)
-                // union dependencies/dependents for all selected targets
-                var byName: [String: Target] = [:]
-                for t in current {
-                    let baseName = t.name
-                    let resolved: [PBXNativeTarget]
-                    switch op.kind {
-                    case .dependencies:
-                        resolved = (try? graph.dependencies(of: baseName, recursive: op.recursive)) ?? []
-                    case .dependents:
-                        resolved = (try? graph.dependents(of: baseName, recursive: op.recursive)) ?? []
+                switch op.kind {
+                case .sources:
+                    var uniq = Set<String>()
+                    var out: [SourceEntry] = []
+                    for t in current {
+                        if let nt = proj.pbxproj.nativeTargets.first(where: { $0.name == t.name }) {
+                            for s in Self.sourceFiles(for: nt) {
+                                let key = "\(t.name)\n\(s)"
+                                if uniq.insert(key).inserted {
+                                    out.append(SourceEntry(target: t.name, path: s))
+                                }
+                            }
+                        }
                     }
-                    for r in resolved {
-                        let mapped = Target(name: r.name, type: TargetType.from(productType: r.productType))
-                        byName[mapped.name] = mapped
+                    return AnyEncodable(out.sorted { $0.target == $1.target ? $0.path < $1.path : $0.target < $1.target })
+                default:
+                    let graph = DependencyGraph(project: proj)
+                    // union dependencies/dependents for all selected targets
+                    var byName: [String: Target] = [:]
+                    for t in current {
+                        let baseName = t.name
+                        let resolved: [PBXNativeTarget]
+                        switch op.kind {
+                        case .dependencies:
+                            resolved = (try? graph.dependencies(of: baseName, recursive: op.recursive)) ?? []
+                        case .dependents:
+                            resolved = (try? graph.dependents(of: baseName, recursive: op.recursive)) ?? []
+                        case .sources:
+                            resolved = [] // unreachable
+                        }
+                        for r in resolved {
+                            let mapped = Target(name: r.name, type: TargetType.from(productType: r.productType))
+                            byName[mapped.name] = mapped
+                        }
                     }
+                    return AnyEncodable(Array(byName.values).sorted { $0.name < $1.name })
                 }
-                return AnyEncodable(Array(byName.values).sorted { $0.name < $1.name })
             } else {
                 return AnyEncodable(current)
             }
@@ -81,6 +102,15 @@ public class XcodeProjectQuery {
             return AnyEncodable(results)
         }
 
+        if let name = Self.extractSourcesCall(from: query) {
+            guard let base = proj.pbxproj.nativeTargets.first(where: { $0.name == name }) else {
+                throw Error.invalidQuery("Unknown target: \(name)")
+            }
+            let paths = Self.sourceFiles(for: base)
+            let out = paths.map { SourceEntry(target: base.name, path: $0) }
+            return AnyEncodable(out)
+        }
+
         throw Error.invalidQuery(query)
     }
 }
@@ -88,6 +118,11 @@ public class XcodeProjectQuery {
 struct Target: Codable {
     var name: String
     var type: TargetType
+}
+
+struct SourceEntry: Codable, Equatable {
+    var target: String
+    var path: String
 }
 
 enum TargetType: String, Codable, Equatable {
@@ -141,7 +176,7 @@ public struct AnyEncodable: Encodable {
 
 extension XcodeProjectQuery {
     struct PipelineOp {
-        enum Kind { case dependencies, dependents }
+        enum Kind { case dependencies, dependents, sources }
         let kind: Kind
         let recursive: Bool
     }
@@ -190,6 +225,23 @@ extension XcodeProjectQuery {
         }
 
         throw Error.invalidQuery(predicate)
+    }
+
+    fileprivate static func sourceFiles(for target: PBXNativeTarget) -> [String] {
+        let phases = target.buildPhases.compactMap { $0 as? PBXSourcesBuildPhase }
+        var results: [String] = []
+        for p in phases {
+            for f in p.files ?? [] {
+                if let fr = f.file as? PBXFileReference {
+                    if let path = fr.path {
+                        results.append(path)
+                    } else if let name = fr.name {
+                        results.append(name)
+                    }
+                }
+            }
+        }
+        return results
     }
 
     private static func extractHasSuffix(from predicate: String) -> String? {
@@ -256,6 +308,9 @@ extension XcodeProjectQuery {
             } else if tok.hasPrefix("dependents") || tok.hasPrefix("reverseDependencies") || tok.hasPrefix("rdeps") {
                 let recursive = parseOptionalRecursive(tok)
                 op = PipelineOp(kind: .dependents, recursive: recursive)
+            } else if tok == "sources" || tok.hasPrefix("sources(") {
+                // sources has no recursive option; ignore any args
+                op = PipelineOp(kind: .sources, recursive: false)
             } else if tok.isEmpty { continue } else {
                 // unknown token, bail
                 return nil
@@ -279,6 +334,11 @@ extension XcodeProjectQuery {
         if let v = extractFunctionArgs(from: query, function: ".reverseDependencies") { return v }
         if let v = extractFunctionArgs(from: query, function: ".rdeps") { return v }
         return nil
+    }
+
+    fileprivate static func extractSourcesCall(from query: String) -> String? {
+        guard let v = extractFunctionArgs(from: query, function: ".sources") else { return nil }
+        return v.name
     }
 
     private static func extractFunctionArgs(from query: String, function: String) -> (name: String, recursive: Bool)? {
