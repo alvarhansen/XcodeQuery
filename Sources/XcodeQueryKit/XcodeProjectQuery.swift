@@ -12,7 +12,7 @@ public class XcodeProjectQuery {
         self.projectPath = projectPath
     }
     
-    public func evaluate(query: String) throws -> Encodable {
+    public func evaluate(query: String) throws -> AnyEncodable {
         let proj = try XcodeProj(pathString: projectPath)
         
         switch query {
@@ -20,8 +20,7 @@ public class XcodeProjectQuery {
             let result = proj.pbxproj.nativeTargets.map { pbxNativeTarget in
                 Target(name: pbxNativeTarget.name)
             }
-//            print(result)
-            return result
+            return AnyEncodable(result)
         default:
             throw Error.invalidQuery(query)
         }
@@ -30,4 +29,16 @@ public class XcodeProjectQuery {
 
 struct Target: Encodable {
     var name: String
+}
+
+public struct AnyEncodable: Encodable {
+    private let _encode: (Encoder) throws -> Void
+
+    public init<T: Encodable>(_ wrapped: T) {
+        self._encode = wrapped.encode
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        try _encode(encoder)
+    }
 }
