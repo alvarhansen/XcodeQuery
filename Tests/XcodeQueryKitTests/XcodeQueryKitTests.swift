@@ -23,8 +23,23 @@ final class XcodeQueryKitTests: XCTestCase {
             basePath: Path(tmp.path),
             name: "Sample",
             targets: [
-                Target(name: "Lib", type: .framework, platform: .iOS, sources: [TargetSource(path: "Lib/Sources"), TargetSource(path: "Shared/Shared.swift")]),
-                Target(name: "App", type: .application, platform: .iOS, sources: [TargetSource(path: "App/Sources"), TargetSource(path: "Shared/Shared.swift")], dependencies: [Dependency(type: .target, reference: "Lib")]),
+                Target(
+                    name: "Lib",
+                    type: .framework,
+                    platform: .iOS,
+                    sources: [TargetSource(path: "Lib/Sources"), TargetSource(path: "Shared/Shared.swift")],
+                    preBuildScripts: [BuildScript(script: .script("echo pre-lib"), name: "PreLib", inputFiles: ["$(SRCROOT)/pre.in"], outputFiles: ["$(SRCROOT)/pre.out"], inputFileLists: ["$(SRCROOT)/preInputs.xcfilelist"], outputFileLists: ["$(SRCROOT)/preOutputs.xcfilelist"])],
+                    postBuildScripts: [BuildScript(script: .script("echo post-lib"), name: "PostLib", inputFiles: ["$(SRCROOT)/post.in"], outputFiles: ["$(SRCROOT)/post.out"])]
+                ),
+                Target(
+                    name: "App",
+                    type: .application,
+                    platform: .iOS,
+                    sources: [TargetSource(path: "App/Sources"), TargetSource(path: "Shared/Shared.swift")],
+                    dependencies: [Dependency(type: .target, reference: "Lib")],
+                    preBuildScripts: [BuildScript(script: .script("echo pre-app"), name: "PreApp")],
+                    postBuildScripts: [BuildScript(script: .script("echo post-app"), name: "PostApp")]
+                ),
                 Target(name: "AppTests", type: .unitTestBundle, platform: .iOS, dependencies: [Dependency(type: .target, reference: "App")]),
                 Target(name: "AppUITests", type: .uiTestBundle, platform: .iOS, dependencies: [Dependency(type: .target, reference: "App")]),
             ],
@@ -211,6 +226,30 @@ final class XcodeQueryKitTests: XCTestCase {
             let result = try JSONDecoder().decode(XcodeQueryKit.OwnerEntry.self, from: data)
             XCTAssertEqual(result.path, "Unowned.swift")
             XCTAssertTrue(result.targets.isEmpty)
+        }
+
+        // buildScripts(App) contains pre and post entries
+        do {
+            let any = try qp.evaluate(query: ".buildScripts(\"App\")")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.BuildScriptEntry].self, from: data)
+            let names = Set(results.compactMap { $0.name })
+            XCTAssertTrue(names.contains("PreApp"))
+            XCTAssertTrue(names.contains("PostApp"))
+            let preStages = results.filter { $0.name == "PreApp" }.map { $0.stage }
+            XCTAssertTrue(preStages.contains(.pre))
+        }
+
+        // pipeline: .targets[] | filter(.type == .framework) | buildScripts -> contains PreLib
+        do {
+            let any = try qp.evaluate(query: ".targets[] | filter(.type == .framework) | buildScripts")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.BuildScriptEntry].self, from: data)
+            XCTAssertTrue(results.contains(where: { $0.target == "Lib" && $0.name == "PreLib" }))
+            // input file lists exist
+            let preLib = results.first(where: { $0.target == "Lib" && $0.name == "PreLib" })!
+            XCTAssertFalse(preLib.inputFileListPaths.isEmpty)
+            XCTAssertFalse(preLib.outputFileListPaths.isEmpty)
         }
     }
 }

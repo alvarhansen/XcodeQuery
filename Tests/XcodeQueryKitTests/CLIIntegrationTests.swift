@@ -22,8 +22,23 @@ final class CLIIntegrationTests: XCTestCase {
             basePath: Path(tmp.path),
             name: "Sample",
             targets: [
-                Target(name: "Lib", type: .framework, platform: .iOS, sources: [TargetSource(path: "Lib/Sources"), TargetSource(path: "Shared/Shared.swift")]),
-                Target(name: "App", type: .application, platform: .iOS, sources: [TargetSource(path: "App/Sources"), TargetSource(path: "Shared/Shared.swift")], dependencies: [Dependency(type: .target, reference: "Lib")]),
+                Target(
+                    name: "Lib",
+                    type: .framework,
+                    platform: .iOS,
+                    sources: [TargetSource(path: "Lib/Sources"), TargetSource(path: "Shared/Shared.swift")],
+                    preBuildScripts: [BuildScript(script: .script("echo pre-lib"), name: "PreLib", inputFiles: ["$(SRCROOT)/pre.in"], outputFiles: ["$(SRCROOT)/pre.out"], inputFileLists: ["$(SRCROOT)/preInputs.xcfilelist"], outputFileLists: ["$(SRCROOT)/preOutputs.xcfilelist"])],
+                    postBuildScripts: [BuildScript(script: .script("echo post-lib"), name: "PostLib")]
+                ),
+                Target(
+                    name: "App",
+                    type: .application,
+                    platform: .iOS,
+                    sources: [TargetSource(path: "App/Sources"), TargetSource(path: "Shared/Shared.swift")],
+                    dependencies: [Dependency(type: .target, reference: "Lib")],
+                    preBuildScripts: [BuildScript(script: .script("echo pre-app"), name: "PreApp")],
+                    postBuildScripts: [BuildScript(script: .script("echo post-app"), name: "PostApp")]
+                ),
                 Target(name: "AppTests", type: .unitTestBundle, platform: .iOS, dependencies: [Dependency(type: .target, reference: "App")]),
                 Target(name: "AppUITests", type: .uiTestBundle, platform: .iOS, dependencies: [Dependency(type: .target, reference: "App")]),
             ]
@@ -130,6 +145,23 @@ final class CLIIntegrationTests: XCTestCase {
         if status7 != 0 { XCTFail("xq reverseDependencies failed (\(status7)):\nSTDERR: \(stderr7)\nSTDOUT: \(stdout7)"); return }
         let depsAlias = try JSONDecoder().decode([Dep].self, from: stdout7.data(using: .utf8)!)
         XCTAssertEqual(Set(depsAlias.map { $0.name }), ["App"])
+
+        // buildScripts(App) -> pre and post entries
+        let (status14, stdout14, stderr14) = try Self.run(process: xqPath, args: [".buildScripts(\"App\")", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status14 != 0 { XCTFail("xq buildScripts failed (\(status14)):\nSTDERR: \(stderr14)\nSTDOUT: \(stdout14)"); return }
+        struct BSEntry: Decodable { let target: String; let name: String?; let stage: String; let inputPaths: [String]; let outputPaths: [String]; let inputFileListPaths: [String]; let outputFileListPaths: [String] }
+        let bsOut = try JSONDecoder().decode([BSEntry].self, from: stdout14.data(using: .utf8)!)
+        XCTAssertTrue(bsOut.contains(where: { $0.target == "App" && $0.name == "PreApp" && $0.stage == "pre" }))
+        XCTAssertTrue(bsOut.contains(where: { $0.target == "App" && $0.name == "PostApp" && $0.stage == "post" }))
+
+        // pipeline buildScripts for framework target -> includes PreLib and file list paths
+        let (status15, stdout15, stderr15) = try Self.run(process: xqPath, args: [".targets[] | filter(.type == .framework) | buildScripts", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status15 != 0 { XCTFail("xq pipeline buildScripts failed (\(status15)):\nSTDERR: \(stderr15)\nSTDOUT: \(stdout15)"); return }
+        let bsPipe = try JSONDecoder().decode([BSEntry].self, from: stdout15.data(using: .utf8)!)
+        let preLib = bsPipe.first(where: { $0.target == "Lib" && $0.name == "PreLib" })
+        XCTAssertNotNil(preLib)
+        XCTAssertFalse(preLib!.inputFileListPaths.isEmpty)
+        XCTAssertFalse(preLib!.outputFileListPaths.isEmpty)
     }
 
     // MARK: - Helpers

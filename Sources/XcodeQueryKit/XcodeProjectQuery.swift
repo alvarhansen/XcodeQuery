@@ -34,6 +34,8 @@ public class XcodeProjectQuery {
         // - .owners("path")
         // - .filesWithMultipleTargets
         // - .filesWithoutTargets
+        // - .buildScripts("TargetName")
+        // - .targets[] | buildScripts
         if query == ".targets" || query == ".targets[]" {
             return AnyEncodable(targets)
         }
@@ -73,6 +75,14 @@ public class XcodeProjectQuery {
                     }
                     let out = uniq.map { OwnerEntry(path: $0.key, targets: Array($0.value).sorted()) }
                     return AnyEncodable(out.sorted { $0.path < $1.path })
+                case .buildScripts:
+                    var scripts: [BuildScriptEntry] = []
+                    for t in current {
+                        if let nt = proj.pbxproj.nativeTargets.first(where: { $0.name == t.name }) {
+                            scripts.append(contentsOf: Self.collectBuildScripts(for: nt))
+                        }
+                    }
+                    return AnyEncodable(scripts)
                 default:
                     let graph = DependencyGraph(project: proj)
                     // union dependencies/dependents for all selected targets
@@ -85,7 +95,7 @@ public class XcodeProjectQuery {
                             resolved = (try? graph.dependencies(of: baseName, recursive: op.recursive)) ?? []
                         case .dependents:
                             resolved = (try? graph.dependents(of: baseName, recursive: op.recursive)) ?? []
-                        case .sources, .targetMembership:
+                        case .sources, .targetMembership, .buildScripts:
                             resolved = [] // unreachable
                         }
                         for r in resolved {
@@ -134,6 +144,13 @@ public class XcodeProjectQuery {
             return AnyEncodable(OwnerEntry(path: oc.path, targets: Array(owners).sorted()))
         }
 
+        if let bc = Self.extractBuildScriptsCall(from: query) {
+            guard let base = proj.pbxproj.nativeTargets.first(where: { $0.name == bc }) else {
+                throw Error.invalidQuery("Unknown target: \(bc)")
+            }
+            return AnyEncodable(Self.collectBuildScripts(for: base))
+        }
+
         throw Error.invalidQuery(query)
     }
 }
@@ -151,6 +168,21 @@ struct SourceEntry: Codable, Equatable {
 struct OwnerEntry: Codable, Equatable {
     var path: String
     var targets: [String]
+}
+
+struct BuildScriptEntry: Codable, Equatable {
+    var target: String
+    var name: String?
+    var stage: Stage
+    var inputPaths: [String]
+    var outputPaths: [String]
+    var inputFileListPaths: [String]
+    var outputFileListPaths: [String]
+
+    enum Stage: String, Codable {
+        case pre
+        case post
+    }
 }
 
 enum TargetType: String, Codable, Equatable {
@@ -204,7 +236,7 @@ public struct AnyEncodable: Encodable {
 
 extension XcodeProjectQuery {
     struct PipelineOp {
-        enum Kind { case dependencies, dependents, sources, targetMembership }
+        enum Kind { case dependencies, dependents, sources, targetMembership, buildScripts }
         let kind: Kind
         let recursive: Bool
         let pathMode: PathMode?
@@ -230,6 +262,43 @@ extension XcodeProjectQuery {
         guard let first = tokens.first, first.hasPrefix("filter("), first.hasSuffix(")") else { return nil }
         let inner = first.dropFirst("filter(".count).dropLast()
         return String(inner).trimmingCharacters(in: .whitespaces)
+    }
+
+    // Parse a pipeline that starts with .targets[] and optionally includes filter and dependencies/dependents
+    fileprivate static func parseTargetsPipeline(_ query: String) -> (filterPredicate: String?, operation: PipelineOp?)? {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix(".targets[]") else { return nil }
+        let remainder = trimmed.dropFirst(".targets[]".count)
+        if remainder.trimmingCharacters(in: .whitespaces).isEmpty { return (nil, nil) }
+        let tokens = remainder.split(separator: "|", omittingEmptySubsequences: true).map { $0.trimmingCharacters(in: .whitespaces) }
+        var filterPred: String?
+        var op: PipelineOp?
+        var lastSourcesMode: PathMode?
+        for tok in tokens {
+            if tok.hasPrefix("filter("), tok.hasSuffix(")") {
+                let inner = tok.dropFirst("filter(".count).dropLast()
+                filterPred = String(inner).trimmingCharacters(in: .whitespaces)
+            } else if tok.hasPrefix("dependencies") {
+                let recursive = parseOptionalRecursive(tok)
+                op = PipelineOp(kind: .dependencies, recursive: recursive)
+            } else if tok.hasPrefix("dependents") || tok.hasPrefix("reverseDependencies") || tok.hasPrefix("rdeps") {
+                let recursive = parseOptionalRecursive(tok)
+                op = PipelineOp(kind: .dependents, recursive: recursive)
+            } else if tok == "sources" || tok.hasPrefix("sources(") {
+                let mode = parseSourcesMode(tok)
+                lastSourcesMode = mode ?? lastSourcesMode
+                op = PipelineOp(kind: .sources, recursive: false, pathMode: lastSourcesMode)
+            } else if tok == "targetMembership" || tok.hasPrefix("targetMembership(") {
+                let mode = parseSourcesMode(tok)
+                op = PipelineOp(kind: .targetMembership, recursive: false, pathMode: mode ?? lastSourcesMode)
+            } else if tok == "buildScripts" {
+                op = PipelineOp(kind: .buildScripts)
+            } else if tok.isEmpty { continue } else {
+                // unknown token, bail
+                return nil
+            }
+        }
+        return (filterPred, op)
     }
 
     // Extracts a single string argument from a function-like query, e.g.
@@ -322,6 +391,27 @@ extension XcodeProjectQuery {
         return results
     }
 
+    fileprivate static func collectBuildScripts(for target: PBXNativeTarget) -> [BuildScriptEntry] {
+        let phases = target.buildPhases
+        let sourcesIndex = phases.firstIndex { $0 is PBXSourcesBuildPhase }
+        var result: [BuildScriptEntry] = []
+        for (idx, phase) in phases.enumerated() {
+            guard let script = phase as? PBXShellScriptBuildPhase else { continue }
+            let stage: BuildScriptEntry.Stage = (sourcesIndex != nil && idx < sourcesIndex!) ? .pre : .post
+            let entry = BuildScriptEntry(
+                target: target.name,
+                name: script.name,
+                stage: stage,
+                inputPaths: script.inputPaths,
+                outputPaths: script.outputPaths,
+                inputFileListPaths: script.inputFileListPaths ?? [],
+                outputFileListPaths: script.outputFileListPaths ?? []
+            )
+            result.append(entry)
+        }
+        return result
+    }
+
     private static func extractHasSuffix(from predicate: String) -> String? {
         // Matches ".name.hasSuffix("TEXT")" or ".name | hasSuffix("TEXT")"
         let trimmed = predicate.trimmingCharacters(in: .whitespaces)
@@ -367,41 +457,6 @@ private extension TargetType {
 // MARK: - Extended parsing for function calls
 
 extension XcodeProjectQuery {
-    // Parse a pipeline that starts with .targets[] and optionally includes filter and dependencies/dependents
-    fileprivate static func parseTargetsPipeline(_ query: String) -> (filterPredicate: String?, operation: PipelineOp?)? {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix(".targets[]") else { return nil }
-        let remainder = trimmed.dropFirst(".targets[]".count)
-        if remainder.trimmingCharacters(in: .whitespaces).isEmpty { return (nil, nil) }
-        let tokens = remainder.split(separator: "|", omittingEmptySubsequences: true).map { $0.trimmingCharacters(in: .whitespaces) }
-        var filterPred: String?
-        var op: PipelineOp?
-        var lastSourcesMode: PathMode?
-        for tok in tokens {
-            if tok.hasPrefix("filter("), tok.hasSuffix(")") {
-                let inner = tok.dropFirst("filter(".count).dropLast()
-                filterPred = String(inner).trimmingCharacters(in: .whitespaces)
-            } else if tok.hasPrefix("dependencies") {
-                let recursive = parseOptionalRecursive(tok)
-                op = PipelineOp(kind: .dependencies, recursive: recursive)
-            } else if tok.hasPrefix("dependents") || tok.hasPrefix("reverseDependencies") || tok.hasPrefix("rdeps") {
-                let recursive = parseOptionalRecursive(tok)
-                op = PipelineOp(kind: .dependents, recursive: recursive)
-            } else if tok == "sources" || tok.hasPrefix("sources(") {
-                let mode = parseSourcesMode(tok)
-                lastSourcesMode = mode ?? lastSourcesMode
-                op = PipelineOp(kind: .sources, recursive: false, pathMode: lastSourcesMode)
-            } else if tok == "targetMembership" || tok.hasPrefix("targetMembership(") {
-                let mode = parseSourcesMode(tok)
-                op = PipelineOp(kind: .targetMembership, recursive: false, pathMode: mode ?? lastSourcesMode)
-            } else if tok.isEmpty { continue } else {
-                // unknown token, bail
-                return nil
-            }
-        }
-        return (filterPred, op)
-    }
-
     private static func parseOptionalRecursive(_ token: String) -> Bool {
         // token may be "dependencies" or "dependencies(recursive: true)"
         guard let open = token.firstIndex(of: "("), token.hasSuffix(")") else { return false }
@@ -474,6 +529,10 @@ extension XcodeProjectQuery {
             cleaned = stripQuotes(arg.trimmingCharacters(in: .whitespaces))
         }
         return PathMode(rawValue: cleaned)
+    }
+
+    fileprivate static func extractBuildScriptsCall(from query: String) -> String? {
+        extractFunctionArg(from: query, function: ".buildScripts")
     }
 
     private static func extractFunctionArgs(from query: String, function: String) -> (name: String, recursive: Bool)? {
