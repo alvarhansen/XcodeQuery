@@ -93,6 +93,24 @@ final class XcodeQueryKitTests: XCTestCase {
             let names = Set(results.map { $0.name })
             XCTAssertEqual(names, ["App", "AppTests", "AppUITests"])
         }
+
+        // pipeline: .targets[] | filter(.type == .app) | dependencies -> [Lib]
+        do {
+            let any = try qp.evaluate(query: ".targets[] | filter(.type == .app) | dependencies")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.Target].self, from: data)
+            let names = Set(results.map { $0.name })
+            XCTAssertEqual(names, ["Lib"])
+        }
+
+        // pipeline recursive: unit tests -> dependencies(recursive: true) -> [App, Lib]
+        do {
+            let any = try qp.evaluate(query: ".targets[] | filter(.type == .unitTest) | dependencies(recursive: true)")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.Target].self, from: data)
+            let names = Set(results.map { $0.name })
+            XCTAssertEqual(names, ["App", "Lib"])
+        }
     }
 }
 

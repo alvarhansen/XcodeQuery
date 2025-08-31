@@ -52,6 +52,12 @@ final class CLIIntegrationTests: XCTestCase {
         let deps = try JSONDecoder().decode([Dep].self, from: depData)
         XCTAssertEqual(Set(deps.map { $0.name }), ["Lib"])
 
+        // pipeline: .targets[] | filter(.type == .unitTest) | dependencies(recursive: true) -> [App, Lib]
+        let (status6, stdout6, stderr6) = try Self.run(process: xqPath, args: [".targets[] | filter(.type == .unitTest) | dependencies(recursive: true)", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status6 != 0 { XCTFail("xq pipeline failed (\(status6)):\nSTDERR: \(stderr6)\nSTDOUT: \(stdout6)"); return }
+        let depsPipe = try JSONDecoder().decode([Dep].self, from: stdout6.data(using: .utf8)!)
+        XCTAssertEqual(Set(depsPipe.map { $0.name }), ["App", "Lib"])
+
         // dependencies(AppTests, recursive: true) -> [App, Lib]
         let (status3, stdout3, stderr3) = try Self.run(process: xqPath, args: [".dependencies(\"AppTests\", recursive: true)", "--project", projPath.string], workingDirectory: Self.packageRoot())
         if status3 != 0 { XCTFail("xq deps recursive failed (\(status3)):\nSTDERR: \(stderr3)\nSTDOUT: \(stdout3)"); return }

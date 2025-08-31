@@ -26,8 +26,40 @@ public class XcodeProjectQuery {
         // - .targets[] | filter(.name.hasSuffix("Tests"))
         // - .targets[] | filter(.name | hasSuffix("Tests"))
         // - .targets[] | filter(.type == .unitTest)
+        // - .targets[] | filter(...) | dependencies(recursive: true)
+        // - .targets[] | dependencies
         if query == ".targets" || query == ".targets[]" {
             return AnyEncodable(targets)
+        }
+
+        if let pipeline = Self.parseTargetsPipeline(query) {
+            // start with all targets
+            var current = targets
+            if let pred = pipeline.filterPredicate {
+                current = try Self.apply(predicate: pred, to: current)
+            }
+            if let op = pipeline.operation {
+                let graph = DependencyGraph(project: proj)
+                // union dependencies/dependents for all selected targets
+                var byName: [String: Target] = [:]
+                for t in current {
+                    let baseName = t.name
+                    let resolved: [PBXNativeTarget]
+                    switch op.kind {
+                    case .dependencies:
+                        resolved = (try? graph.dependencies(of: baseName, recursive: op.recursive)) ?? []
+                    case .dependents:
+                        resolved = (try? graph.dependents(of: baseName, recursive: op.recursive)) ?? []
+                    }
+                    for r in resolved {
+                        let mapped = Target(name: r.name, type: TargetType.from(productType: r.productType))
+                        byName[mapped.name] = mapped
+                    }
+                }
+                return AnyEncodable(Array(byName.values).sorted { $0.name < $1.name })
+            } else {
+                return AnyEncodable(current)
+            }
         }
 
         if let pred = Self.extractFilterPredicate(from: query) {
@@ -108,16 +140,20 @@ public struct AnyEncodable: Encodable {
 // MARK: - Simple query parsing
 
 extension XcodeProjectQuery {
+    struct PipelineOp {
+        enum Kind { case dependencies, dependents }
+        let kind: Kind
+        let recursive: Bool
+    }
     private static func extractFilterPredicate(from query: String) -> String? {
         // Accept forms like: ".targets[] | filter(<predicate>)"
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix(".targets[]") else { return nil }
-        let remainder = trimmed.dropFirst(".targets[]".count).trimmingCharacters(in: .whitespaces)
-        guard remainder.hasPrefix("| filter(") && remainder.hasSuffix(")") else { return nil }
-        let start = remainder.index(remainder.startIndex, offsetBy: 2) // skip "| "
-        let call = remainder[start...]
-        guard call.hasPrefix("filter(") && call.last == ")" else { return nil }
-        let inner = call.dropFirst("filter(".count).dropLast()
+        let remainder = trimmed.dropFirst(".targets[]".count)
+        // Split into pipeline tokens separated by '|'
+        let tokens = remainder.split(separator: "|", omittingEmptySubsequences: true).map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let first = tokens.first, first.hasPrefix("filter("), first.hasSuffix(")") else { return nil }
+        let inner = first.dropFirst("filter(".count).dropLast()
         return String(inner).trimmingCharacters(in: .whitespaces)
     }
 
@@ -201,6 +237,39 @@ private extension TargetType {
 // MARK: - Extended parsing for function calls
 
 extension XcodeProjectQuery {
+    // Parse a pipeline that starts with .targets[] and optionally includes filter and dependencies/dependents
+    fileprivate static func parseTargetsPipeline(_ query: String) -> (filterPredicate: String?, operation: PipelineOp?)? {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix(".targets[]") else { return nil }
+        let remainder = trimmed.dropFirst(".targets[]".count)
+        if remainder.trimmingCharacters(in: .whitespaces).isEmpty { return (nil, nil) }
+        let tokens = remainder.split(separator: "|", omittingEmptySubsequences: true).map { $0.trimmingCharacters(in: .whitespaces) }
+        var filterPred: String?
+        var op: PipelineOp?
+        for tok in tokens {
+            if tok.hasPrefix("filter("), tok.hasSuffix(")") {
+                let inner = tok.dropFirst("filter(".count).dropLast()
+                filterPred = String(inner).trimmingCharacters(in: .whitespaces)
+            } else if tok.hasPrefix("dependencies") {
+                let recursive = parseOptionalRecursive(tok)
+                op = PipelineOp(kind: .dependencies, recursive: recursive)
+            } else if tok.hasPrefix("dependents") {
+                let recursive = parseOptionalRecursive(tok)
+                op = PipelineOp(kind: .dependents, recursive: recursive)
+            } else if tok.isEmpty { continue } else {
+                // unknown token, bail
+                return nil
+            }
+        }
+        return (filterPred, op)
+    }
+
+    private static func parseOptionalRecursive(_ token: String) -> Bool {
+        // token may be "dependencies" or "dependencies(recursive: true)"
+        guard let open = token.firstIndex(of: "("), token.hasSuffix(")") else { return false }
+        let inner = token[token.index(after: open)..<token.index(before: token.endIndex)]
+        return parseRecursiveFlag(String(inner))
+    }
     fileprivate static func extractDependenciesCall(from query: String) -> (name: String, recursive: Bool)? {
         extractFunctionArgs(from: query, function: ".dependencies")
     }
