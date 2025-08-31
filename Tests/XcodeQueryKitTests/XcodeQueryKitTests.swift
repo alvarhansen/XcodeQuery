@@ -94,6 +94,15 @@ final class XcodeQueryKitTests: XCTestCase {
             XCTAssertEqual(names, ["App", "AppTests", "AppUITests"])
         }
 
+        // reverseDependencies alias should work the same
+        do {
+            let any = try qp.evaluate(query: ".reverseDependencies(\"Lib\")")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.Target].self, from: data)
+            let names = Set(results.map { $0.name })
+            XCTAssertEqual(names, ["App"])
+        }
+
         // pipeline: .targets[] | filter(.type == .app) | dependencies -> [Lib]
         do {
             let any = try qp.evaluate(query: ".targets[] | filter(.type == .app) | dependencies")
@@ -110,6 +119,24 @@ final class XcodeQueryKitTests: XCTestCase {
             let results = try JSONDecoder().decode([XcodeQueryKit.Target].self, from: data)
             let names = Set(results.map { $0.name })
             XCTAssertEqual(names, ["App", "Lib"])
+        }
+
+        // pipeline dependents: framework -> dependents -> [App]
+        do {
+            let any = try qp.evaluate(query: ".targets[] | filter(.type == .framework) | dependents")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.Target].self, from: data)
+            let names = Set(results.map { $0.name })
+            XCTAssertEqual(names, ["App"])
+        }
+
+        // pipeline dependents recursive: framework -> dependents(recursive: true) -> [App, AppTests, AppUITests]
+        do {
+            let any = try qp.evaluate(query: ".targets[] | filter(.type == .framework) | dependents(recursive: true)")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.Target].self, from: data)
+            let names = Set(results.map { $0.name })
+            XCTAssertEqual(names, ["App", "AppTests", "AppUITests"])
         }
     }
 }

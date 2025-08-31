@@ -75,6 +75,24 @@ final class CLIIntegrationTests: XCTestCase {
         if status5 != 0 { XCTFail("xq dependents recursive failed (\(status5)):\nSTDERR: \(stderr5)\nSTDOUT: \(stdout5)"); return }
         let depsRec2 = try JSONDecoder().decode([Dep].self, from: stdout5.data(using: .utf8)!)
         XCTAssertEqual(Set(depsRec2.map { $0.name }), ["App", "AppTests", "AppUITests"])
+
+        // pipeline dependents: frameworks -> dependents -> [App]
+        let (status8, stdout8, stderr8) = try Self.run(process: xqPath, args: [".targets[] | filter(.type == .framework) | dependents", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status8 != 0 { XCTFail("xq pipeline dependents failed (\(status8)):\nSTDERR: \(stderr8)\nSTDOUT: \(stdout8)"); return }
+        let depsPipeDeps = try JSONDecoder().decode([Dep].self, from: stdout8.data(using: .utf8)!)
+        XCTAssertEqual(Set(depsPipeDeps.map { $0.name }), ["App"])
+
+        // pipeline dependents recursive: frameworks -> dependents(recursive: true) -> [App, AppTests, AppUITests]
+        let (status9, stdout9, stderr9) = try Self.run(process: xqPath, args: [".targets[] | filter(.type == .framework) | dependents(recursive: true)", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status9 != 0 { XCTFail("xq pipeline dependents recursive failed (\(status9)):\nSTDERR: \(stderr9)\nSTDOUT: \(stdout9)"); return }
+        let depsPipeDepsRec = try JSONDecoder().decode([Dep].self, from: stdout9.data(using: .utf8)!)
+        XCTAssertEqual(Set(depsPipeDepsRec.map { $0.name }), ["App", "AppTests", "AppUITests"])
+
+        // reverseDependencies alias should work the same
+        let (status7, stdout7, stderr7) = try Self.run(process: xqPath, args: [".reverseDependencies(\"Lib\")", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status7 != 0 { XCTFail("xq reverseDependencies failed (\(status7)):\nSTDERR: \(stderr7)\nSTDOUT: \(stdout7)"); return }
+        let depsAlias = try JSONDecoder().decode([Dep].self, from: stdout7.data(using: .utf8)!)
+        XCTAssertEqual(Set(depsAlias.map { $0.name }), ["App"])
     }
 
     // MARK: - Helpers

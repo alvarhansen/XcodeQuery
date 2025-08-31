@@ -253,7 +253,7 @@ extension XcodeProjectQuery {
             } else if tok.hasPrefix("dependencies") {
                 let recursive = parseOptionalRecursive(tok)
                 op = PipelineOp(kind: .dependencies, recursive: recursive)
-            } else if tok.hasPrefix("dependents") {
+            } else if tok.hasPrefix("dependents") || tok.hasPrefix("reverseDependencies") || tok.hasPrefix("rdeps") {
                 let recursive = parseOptionalRecursive(tok)
                 op = PipelineOp(kind: .dependents, recursive: recursive)
             } else if tok.isEmpty { continue } else {
@@ -275,7 +275,10 @@ extension XcodeProjectQuery {
     }
 
     fileprivate static func extractDependentsCall(from query: String) -> (name: String, recursive: Bool)? {
-        extractFunctionArgs(from: query, function: ".dependents")
+        if let v = extractFunctionArgs(from: query, function: ".dependents") { return v }
+        if let v = extractFunctionArgs(from: query, function: ".reverseDependencies") { return v }
+        if let v = extractFunctionArgs(from: query, function: ".rdeps") { return v }
+        return nil
     }
 
     private static func extractFunctionArgs(from query: String, function: String) -> (name: String, recursive: Bool)? {
