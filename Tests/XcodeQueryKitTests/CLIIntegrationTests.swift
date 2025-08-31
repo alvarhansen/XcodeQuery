@@ -162,6 +162,15 @@ final class CLIIntegrationTests: XCTestCase {
         XCTAssertNotNil(preLib)
         XCTAssertFalse(preLib!.inputFileListPaths.isEmpty)
         XCTAssertFalse(preLib!.outputFileListPaths.isEmpty)
+
+        // pipeline buildScripts filtered by stage == pre -> contains only pre scripts (PreApp, PreLib)
+        let (status16, stdout16, stderr16) = try Self.run(process: xqPath, args: [".targets[] | buildScripts | filter(.stage == .pre)", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status16 != 0 { XCTFail("xq pipeline buildScripts filter failed (\(status16)):\nSTDERR: \(stderr16)\nSTDOUT: \(stdout16)"); return }
+        let preOnly = try JSONDecoder().decode([BSEntry].self, from: stdout16.data(using: .utf8)!)
+        XCTAssertTrue(preOnly.allSatisfy { $0.stage == "pre" })
+        let preNames = Set(preOnly.compactMap { $0.name })
+        XCTAssertTrue(preNames.contains("PreApp"))
+        XCTAssertTrue(preNames.contains("PreLib"))
     }
 
     // MARK: - Helpers

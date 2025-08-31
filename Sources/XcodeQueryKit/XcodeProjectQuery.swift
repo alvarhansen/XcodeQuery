@@ -82,6 +82,9 @@ public class XcodeProjectQuery {
                             scripts.append(contentsOf: Self.collectBuildScripts(for: nt))
                         }
                     }
+                    if let sp = pipeline.scriptsFilter {
+                        scripts = try Self.applyScriptPredicate(sp, to: scripts)
+                    }
                     return AnyEncodable(scripts)
                 default:
                     let graph = DependencyGraph(project: proj)
@@ -265,40 +268,51 @@ extension XcodeProjectQuery {
     }
 
     // Parse a pipeline that starts with .targets[] and optionally includes filter and dependencies/dependents
-    fileprivate static func parseTargetsPipeline(_ query: String) -> (filterPredicate: String?, operation: PipelineOp?)? {
+    fileprivate static func parseTargetsPipeline(_ query: String) -> (filterPredicate: String?, operation: PipelineOp?, scriptsFilter: String?)? {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix(".targets[]") else { return nil }
         let remainder = trimmed.dropFirst(".targets[]".count)
-        if remainder.trimmingCharacters(in: .whitespaces).isEmpty { return (nil, nil) }
+        if remainder.trimmingCharacters(in: .whitespaces).isEmpty { return (nil, nil, nil) }
         let tokens = remainder.split(separator: "|", omittingEmptySubsequences: true).map { $0.trimmingCharacters(in: .whitespaces) }
         var filterPred: String?
+        var scriptsFilter: String?
         var op: PipelineOp?
+        var lastKind: PipelineOp.Kind?
         var lastSourcesMode: PathMode?
         for tok in tokens {
             if tok.hasPrefix("filter("), tok.hasSuffix(")") {
                 let inner = tok.dropFirst("filter(".count).dropLast()
-                filterPred = String(inner).trimmingCharacters(in: .whitespaces)
+                if lastKind == .buildScripts {
+                    scriptsFilter = String(inner).trimmingCharacters(in: .whitespaces)
+                } else {
+                    filterPred = String(inner).trimmingCharacters(in: .whitespaces)
+                }
             } else if tok.hasPrefix("dependencies") {
                 let recursive = parseOptionalRecursive(tok)
                 op = PipelineOp(kind: .dependencies, recursive: recursive)
+                lastKind = .dependencies
             } else if tok.hasPrefix("dependents") || tok.hasPrefix("reverseDependencies") || tok.hasPrefix("rdeps") {
                 let recursive = parseOptionalRecursive(tok)
                 op = PipelineOp(kind: .dependents, recursive: recursive)
+                lastKind = .dependents
             } else if tok == "sources" || tok.hasPrefix("sources(") {
                 let mode = parseSourcesMode(tok)
                 lastSourcesMode = mode ?? lastSourcesMode
                 op = PipelineOp(kind: .sources, recursive: false, pathMode: lastSourcesMode)
+                lastKind = .sources
             } else if tok == "targetMembership" || tok.hasPrefix("targetMembership(") {
                 let mode = parseSourcesMode(tok)
                 op = PipelineOp(kind: .targetMembership, recursive: false, pathMode: mode ?? lastSourcesMode)
+                lastKind = .targetMembership
             } else if tok == "buildScripts" {
                 op = PipelineOp(kind: .buildScripts)
+                lastKind = .buildScripts
             } else if tok.isEmpty { continue } else {
                 // unknown token, bail
                 return nil
             }
         }
-        return (filterPred, op)
+        return (filterPred, op, scriptsFilter)
     }
 
     // Extracts a single string argument from a function-like query, e.g.
@@ -333,6 +347,37 @@ extension XcodeProjectQuery {
             return targets.filter { $0.name.hasSuffix(suffix) }
         }
 
+        throw Error.invalidQuery(predicate)
+    }
+
+    private static func applyScriptPredicate(_ predicate: String, to scripts: [BuildScriptEntry]) throws -> [BuildScriptEntry] {
+        // Support:
+        // - .stage == .pre | .post
+        // - .name == "Text"
+        // - .name.hasPrefix("Text") or .name | hasPrefix("Text")
+        // - .name.hasSuffix("Text") or .name | hasSuffix("Text")
+        let trimmed = predicate.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix(".stage == .") {
+            let value = trimmed.replacingOccurrences(of: ".stage == .", with: "")
+            switch value {
+            case "pre": return scripts.filter { $0.stage == .pre }
+            case "post": return scripts.filter { $0.stage == .post }
+            default: throw Error.invalidQuery(predicate)
+            }
+        }
+        if trimmed.hasPrefix(".name == ") {
+            let rest = trimmed.dropFirst(".name == ".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                let val = String(rest.dropFirst().dropLast())
+                return scripts.filter { ($0.name ?? "") == val }
+            }
+        }
+        if let pfx = extractNameHasPrefix(from: predicate) {
+            return scripts.filter { ($0.name ?? "").hasPrefix(pfx) }
+        }
+        if let sfx = extractHasSuffix(from: predicate) {
+            return scripts.filter { ($0.name ?? "").hasSuffix(sfx) }
+        }
         throw Error.invalidQuery(predicate)
     }
 
@@ -430,6 +475,24 @@ extension XcodeProjectQuery {
         }
         guard callPart.hasPrefix("hasSuffix(\"") && callPart.hasSuffix("\")") else { return nil }
         let inner = callPart.dropFirst("hasSuffix(\"".count).dropLast("\")".count)
+        return String(inner)
+    }
+
+    private static func extractNameHasPrefix(from predicate: String) -> String? {
+        let trimmed = predicate.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix(".name") else { return nil }
+        let remainder = trimmed.dropFirst(".name".count).trimmingCharacters(in: .whitespaces)
+        let callPart: Substring
+        if remainder.hasPrefix("|") {
+            let afterPipe = remainder.dropFirst().trimmingCharacters(in: .whitespaces)
+            callPart = Substring(afterPipe)
+        } else if remainder.hasPrefix(".") {
+            callPart = remainder.dropFirst()
+        } else {
+            return nil
+        }
+        guard callPart.hasPrefix("hasPrefix(\"") && callPart.hasSuffix("\")") else { return nil }
+        let inner = callPart.dropFirst("hasPrefix(\"".count).dropLast("\")".count)
         return String(inner)
     }
 }

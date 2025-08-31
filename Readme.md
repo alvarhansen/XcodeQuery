@@ -54,3 +54,10 @@ Planned behavior if implemented
 - fileRef: return the raw `PBXFileReference.path`/`name` as-is (current default).
 - absolute: resolve each file’s path using its `sourceTree` and the project location to produce a full absolute path.
 - normalized: return a path relative to the project root directory (e.g., stripping the absolute prefix to make paths stable across machines).
+- Build script queries
+
+- Per-target scripts: `xq '.buildScripts("App")'`
+- Pipeline: `xq '.targets[] | filter(.type == .framework) | buildScripts'`
+- Filter script stage or name in pipeline:
+  - Pre-build scripts: `xq '.targets[] | buildScripts | filter(.stage == .pre)'`
+  - Name prefix: `xq '.targets[] | buildScripts | filter(.name.hasPrefix("Pre"))'`
