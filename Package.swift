@@ -9,8 +9,9 @@ let package = Package(
         .executable(name: "xq", targets: ["XcodeQuery"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/tuist/XcodeProj.git", exact: "9.4.3"),
+        .package(url: "https://github.com/tuist/XcodeProj.git", exact: "8.27.7"),
         .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.6.1"),
+        .package(url: "https://github.com/yonaskolb/XcodeGen.git", from: "2.41.0"),
     ],
     targets: [
         .executableTarget(
@@ -31,6 +32,14 @@ let package = Package(
             name: "XcodeQueryKit",
             dependencies: [
                 .product(name: "XcodeProj", package: "XcodeProj"),
+            ]
+        ),
+        .testTarget(
+            name: "XcodeQueryKitTests",
+            dependencies: [
+                .target(name: "XcodeQueryKit"),
+                .product(name: "XcodeGenKit", package: "XcodeGen"),
+                .product(name: "ProjectSpec", package: "XcodeGen"),
             ]
         ),
     ]
