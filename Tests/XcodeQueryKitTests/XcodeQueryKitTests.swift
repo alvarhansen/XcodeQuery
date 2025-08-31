@@ -14,6 +14,8 @@ final class XcodeQueryKitTests: XCTestCase {
         // Create some source files for targets
         try FileManager.default.createDirectory(atPath: tmp.path + "/Lib/Sources", withIntermediateDirectories: true)
         try "// lib".write(toFile: tmp.path + "/Lib/Sources/LibFile.swift", atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(atPath: tmp.path + "/Shared", withIntermediateDirectories: true)
+        try "// shared".write(toFile: tmp.path + "/Shared/Shared.swift", atomically: true, encoding: .utf8)
         try FileManager.default.createDirectory(atPath: tmp.path + "/App/Sources", withIntermediateDirectories: true)
         try "// app".write(toFile: tmp.path + "/App/Sources/AppFile.swift", atomically: true, encoding: .utf8)
 
@@ -21,11 +23,12 @@ final class XcodeQueryKitTests: XCTestCase {
             basePath: Path(tmp.path),
             name: "Sample",
             targets: [
-                Target(name: "Lib", type: .framework, platform: .iOS, sources: [TargetSource(path: "Lib/Sources")]),
-                Target(name: "App", type: .application, platform: .iOS, sources: [TargetSource(path: "App/Sources")], dependencies: [Dependency(type: .target, reference: "Lib")]),
+                Target(name: "Lib", type: .framework, platform: .iOS, sources: [TargetSource(path: "Lib/Sources"), TargetSource(path: "Shared/Shared.swift")]),
+                Target(name: "App", type: .application, platform: .iOS, sources: [TargetSource(path: "App/Sources"), TargetSource(path: "Shared/Shared.swift")], dependencies: [Dependency(type: .target, reference: "Lib")]),
                 Target(name: "AppTests", type: .unitTestBundle, platform: .iOS, dependencies: [Dependency(type: .target, reference: "App")]),
                 Target(name: "AppUITests", type: .uiTestBundle, platform: .iOS, dependencies: [Dependency(type: .target, reference: "App")]),
-            ]
+            ],
+            fileGroups: ["Unowned.swift"]
         )
         let generator = ProjectGenerator(project: project)
         let xcodeproj = try generator.generateXcodeProject(in: Path(tmp.path), userName: "CI")
@@ -178,6 +181,36 @@ final class XcodeQueryKitTests: XCTestCase {
             XCTAssertTrue(results.allSatisfy { !$0.path.hasPrefix("/") })
             XCTAssertTrue(results.contains(where: { $0.path.contains("Lib/Sources/LibFile.swift") }))
             XCTAssertFalse(results.contains(where: { $0.path.hasPrefix("./") }))
+        }
+
+        // targetMembership for Lib file (normalized)
+        do {
+            let any = try qp.evaluate(query: ".targetMembership(\"Lib/Sources/LibFile.swift\", pathMode: \"normalized\")")
+            let data = try JSONEncoder().encode(any)
+            let result = try JSONDecoder().decode(XcodeQueryKit.OwnerEntry.self, from: data)
+            XCTAssertEqual(result.path, "Lib/Sources/LibFile.swift")
+            XCTAssertEqual(Set(result.targets), ["Lib"])
+        }
+
+        // Using pipeline targetMembership: Shared/Shared.swift should appear with two targets
+        do {
+            let any = try qp.evaluate(query: ".targets[] | sources(pathMode: \"normalized\") | targetMembership")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.OwnerEntry].self, from: data)
+            let entry = results.first { $0.path.contains("Shared/Shared.swift") }
+            XCTAssertNotNil(entry)
+            XCTAssertEqual(Set(entry!.targets), ["App", "Lib"])
+        }
+
+        // A file that is not in any target reports empty membership
+        do {
+            try "// unowned".write(toFile: tmp.path + "/Unowned.swift", atomically: true, encoding: .utf8)
+            // Note: add to project navigator but not to any target
+            let any = try qp.evaluate(query: ".targetMembership(\"Unowned.swift\", pathMode: \"normalized\")")
+            let data = try JSONEncoder().encode(any)
+            let result = try JSONDecoder().decode(XcodeQueryKit.OwnerEntry.self, from: data)
+            XCTAssertEqual(result.path, "Unowned.swift")
+            XCTAssertTrue(result.targets.isEmpty)
         }
     }
 }

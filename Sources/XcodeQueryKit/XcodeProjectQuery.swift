@@ -31,6 +31,9 @@ public class XcodeProjectQuery {
         // - .targets[] | dependencies
         // - .sources("TargetName")
         // - .targets[] | filter(...) | sources
+        // - .owners("path")
+        // - .filesWithMultipleTargets
+        // - .filesWithoutTargets
         if query == ".targets" || query == ".targets[]" {
             return AnyEncodable(targets)
         }
@@ -57,6 +60,19 @@ public class XcodeProjectQuery {
                         }
                     }
                     return AnyEncodable(out.sorted { $0.target == $1.target ? $0.path < $1.path : $0.target < $1.target })
+                case .targetMembership:
+                    // Given selected targets, compute their sources then map to owners
+                    let index = FileIndex(project: proj, projectPath: projectPath)
+                    var uniq = [String: Set<String>]()
+                    for t in current {
+                        if let nt = proj.pbxproj.nativeTargets.first(where: { $0.name == t.name }) {
+                            for s in Self.sourceFiles(for: nt, mode: op.pathMode ?? .fileRef, projectPath: projectPath) {
+                                uniq[s, default: []].formUnion(index.owners(forPath: s, mode: op.pathMode ?? .fileRef))
+                            }
+                        }
+                    }
+                    let out = uniq.map { OwnerEntry(path: $0.key, targets: Array($0.value).sorted()) }
+                    return AnyEncodable(out.sorted { $0.path < $1.path })
                 default:
                     let graph = DependencyGraph(project: proj)
                     // union dependencies/dependents for all selected targets
@@ -69,7 +85,7 @@ public class XcodeProjectQuery {
                             resolved = (try? graph.dependencies(of: baseName, recursive: op.recursive)) ?? []
                         case .dependents:
                             resolved = (try? graph.dependents(of: baseName, recursive: op.recursive)) ?? []
-                        case .sources:
+                        case .sources, .targetMembership:
                             resolved = [] // unreachable
                         }
                         for r in resolved {
@@ -112,6 +128,12 @@ public class XcodeProjectQuery {
             return AnyEncodable(out)
         }
 
+        if let oc = Self.extractTargetMembershipCall(from: query) {
+            let index = FileIndex(project: proj, projectPath: projectPath)
+            let owners = index.owners(forPath: oc.path, mode: oc.mode)
+            return AnyEncodable(OwnerEntry(path: oc.path, targets: Array(owners).sorted()))
+        }
+
         throw Error.invalidQuery(query)
     }
 }
@@ -124,6 +146,11 @@ struct Target: Codable {
 struct SourceEntry: Codable, Equatable {
     var target: String
     var path: String
+}
+
+struct OwnerEntry: Codable, Equatable {
+    var path: String
+    var targets: [String]
 }
 
 enum TargetType: String, Codable, Equatable {
@@ -177,7 +204,7 @@ public struct AnyEncodable: Encodable {
 
 extension XcodeProjectQuery {
     struct PipelineOp {
-        enum Kind { case dependencies, dependents, sources }
+        enum Kind { case dependencies, dependents, sources, targetMembership }
         let kind: Kind
         let recursive: Bool
         let pathMode: PathMode?
@@ -349,6 +376,7 @@ extension XcodeProjectQuery {
         let tokens = remainder.split(separator: "|", omittingEmptySubsequences: true).map { $0.trimmingCharacters(in: .whitespaces) }
         var filterPred: String?
         var op: PipelineOp?
+        var lastSourcesMode: PathMode?
         for tok in tokens {
             if tok.hasPrefix("filter("), tok.hasSuffix(")") {
                 let inner = tok.dropFirst("filter(".count).dropLast()
@@ -361,7 +389,11 @@ extension XcodeProjectQuery {
                 op = PipelineOp(kind: .dependents, recursive: recursive)
             } else if tok == "sources" || tok.hasPrefix("sources(") {
                 let mode = parseSourcesMode(tok)
-                op = PipelineOp(kind: .sources, recursive: false, pathMode: mode)
+                lastSourcesMode = mode ?? lastSourcesMode
+                op = PipelineOp(kind: .sources, recursive: false, pathMode: lastSourcesMode)
+            } else if tok == "targetMembership" || tok.hasPrefix("targetMembership(") {
+                let mode = parseSourcesMode(tok)
+                op = PipelineOp(kind: .targetMembership, recursive: false, pathMode: mode ?? lastSourcesMode)
             } else if tok.isEmpty { continue } else {
                 // unknown token, bail
                 return nil
@@ -401,6 +433,22 @@ extension XcodeProjectQuery {
             if let parsed = parsePathMode(from: arg) { mode = parsed }
         }
         return (name: name, mode: mode)
+    }
+
+    fileprivate static func extractTargetMembershipCall(from query: String) -> (path: String, mode: PathMode)? {
+        // .targetMembership("<path>") or .targetMembership("<path>", pathMode: "normalized")
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix(".targetMembership(") && trimmed.hasSuffix(")") else { return nil }
+        let inner = trimmed.dropFirst(".targetMembership(".count).dropLast()
+        let items = inner.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: true)
+        guard let first = items.first else { return nil }
+        let path = stripQuotes(String(first).trimmingCharacters(in: .whitespaces))
+        var mode: PathMode = .fileRef
+        if items.count == 2 {
+            let arg = String(items[1]).trimmingCharacters(in: .whitespaces)
+            if let parsed = parsePathMode(from: arg) { mode = parsed }
+        }
+        return (path: path, mode: mode)
     }
 
     private static func parseSourcesMode(_ token: String) -> PathMode? {
@@ -519,5 +567,124 @@ private final class DependencyGraph {
             if t.name != start { unique.append(t) }
         }
         return unique
+    }
+}
+
+// MARK: - File index utilities
+
+private final class FileIndex {
+    private let proj: XcodeProj
+    private let projectRoot: String
+    private var ownersByRefPath: [String: Set<String>] = [:]
+    private var ownersByAbsPath: [String: Set<String>] = [:]
+    private var ownersByNormPath: [String: Set<String>] = [:]
+    private var allFileRefs: Set<String> = []
+    private var allAbsPaths: Set<String> = []
+    private var allNormPaths: Set<String> = []
+
+    init(project: XcodeProj, projectPath: String) {
+        self.proj = project
+        let projDirURL = URL(fileURLWithPath: projectPath).deletingLastPathComponent()
+        self.projectRoot = projDirURL.standardizedFileURL.path
+        buildIndex()
+    }
+
+    func owners(forPath path: String, mode: XcodeProjectQuery.PathMode) -> Set<String> {
+        switch mode {
+        case .fileRef: return ownersByRefPath[path] ?? []
+        case .absolute: return ownersByAbsPath[path] ?? []
+        case .normalized: return ownersByNormPath[path] ?? []
+        }
+    }
+
+    func filesWithMultipleTargets(mode: XcodeProjectQuery.PathMode) -> [(key: String, value: Set<String>)] {
+        let dict: [String: Set<String>] = {
+            switch mode {
+            case .fileRef: return ownersByRefPath
+            case .absolute: return ownersByAbsPath
+            case .normalized: return ownersByNormPath
+            }
+        }()
+        return dict.filter { $0.value.count > 1 }.sorted { $0.key < $1.key }
+    }
+
+    func filesWithoutTargets(mode: XcodeProjectQuery.PathMode) -> [String] {
+        let all: Set<String> = {
+            switch mode {
+            case .fileRef: return allFileRefs
+            case .absolute: return allAbsPaths
+            case .normalized: return allNormPaths
+            }
+        }()
+        let withOwners: Set<String> = {
+            switch mode {
+            case .fileRef: return Set(ownersByRefPath.keys)
+            case .absolute: return Set(ownersByAbsPath.keys)
+            case .normalized: return Set(ownersByNormPath.keys)
+            }
+        }()
+        return Array(all.subtracting(withOwners)).sorted()
+    }
+
+    private func buildIndex() {
+        // Collect all file references of source-like files
+        let refs = proj.pbxproj.fileReferences
+        var sourceRefs: [PBXFileReference] = []
+        for fr in refs {
+            if let name = fr.path ?? fr.name, isSourceLike(name) {
+                sourceRefs.append(fr)
+                let (refPath, absPath, normPath) = paths(for: fr)
+                if let refPath { allFileRefs.insert(refPath) }
+                if let absPath { allAbsPaths.insert(absPath) }
+                if let normPath { allNormPaths.insert(normPath) }
+            }
+        }
+
+        // Map ownership via sources build phases
+        for target in proj.pbxproj.nativeTargets {
+            let targetName = target.name
+            for phase in target.buildPhases.compactMap({ $0 as? PBXSourcesBuildPhase }) {
+                for bf in phase.files ?? [] {
+                    if let fr = bf.file as? PBXFileReference {
+                        guard let name = fr.path ?? fr.name, isSourceLike(name) else { continue }
+                        let (refPath, absPath, normPath) = paths(for: fr)
+                        if let refPath { ownersByRefPath[refPath, default: []].insert(targetName) }
+                        if let absPath { ownersByAbsPath[absPath, default: []].insert(targetName) }
+                        if let normPath { ownersByNormPath[normPath, default: []].insert(targetName) }
+                    }
+                }
+            }
+        }
+    }
+
+    private func isSourceLike(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        return lower.hasSuffix(".swift") || lower.hasSuffix(".m") || lower.hasSuffix(".mm") || lower.hasSuffix(".c") || lower.hasSuffix(".cc") || lower.hasSuffix(".cpp")
+    }
+
+    private func paths(for fr: PBXFileReference) -> (String?, String?, String?) {
+        let ref = fr.path ?? fr.name
+        var refPath: String? = ref
+        var absPath: String?
+        var norm: String?
+        if let fullStr = (try? fr.fullPath(sourceRoot: projectRoot)) ?? nil {
+            let stdFull = URL(fileURLWithPath: fullStr).standardizedFileURL.path
+            absPath = stdFull
+            if stdFull.hasPrefix(projectRoot + "/") {
+                norm = String(stdFull.dropFirst(projectRoot.count + 1))
+            } else {
+                norm = stdFull
+            }
+        } else if let r = ref {
+            refPath = r
+            let stdRel = URL(fileURLWithPath: r, relativeTo: URL(fileURLWithPath: projectRoot)).standardizedFileURL.path
+            absPath = stdRel
+            if stdRel.hasPrefix(projectRoot + "/") {
+                norm = String(stdRel.dropFirst(projectRoot.count + 1))
+            } else {
+                norm = stdRel
+            }
+        }
+        return (refPath, absPath, norm)
     }
 }
