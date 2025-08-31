@@ -32,6 +32,14 @@ Target membership
 - With path mode: `xq '.targetMembership("Shared/Shared.swift", pathMode: "normalized")'`
 - Pipeline: `xq '.targets[] | sources(pathMode: "normalized") | targetMembership'` (returns each file with the targets it belongs to)
 
+jq examples
+
+- Files used by multiple targets (normalized paths):
+  - `xq '.targets[] | sources(pathMode: "normalized") | targetMembership' --project MyApp.xcodeproj | jq -r '.[] | select(.targets | length > 1) | "\(.path) -> \(.targets|join(", "))"'`
+
+- Files not in any target (absolute paths):
+  - `find "$(pwd)" \( -name "*.swift" -o -name "*.m" -o -name "*.mm" -o -name "*.c" -o -name "*.cc" -o -name "*.cpp" \) -not -path "$(pwd)/.build/*" -not -path "$(pwd)/**/*.xcodeproj/*" -print0 | xargs -0 -n1 -I{} sh -c 'xq ".targetMembership(\"{}\", pathMode: \"absolute\")" --project MyApp.xcodeproj' | jq -s '. | map(select(.targets | length == 0))'`
+
 Path options (proposal)
 
 - Add an optional argument to `sources` (and `targetMembership`) to control path formatting. Examples:
