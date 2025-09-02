@@ -32,6 +32,13 @@ After install, verify: `xq --help`
 4) Users can then install stable via:
    - `brew install https://raw.githubusercontent.com/alvarhansen/XcodeQuery/main/HomebrewFormula/xq.rb`
 
+## Homebrew Tap
+
+Once the `alvarhansen/homebrew-xcodequery` tap has the generated formula, users can install via:
+
+- `brew tap alvarhansen/xcodequery`
+- `brew install xq`
+
 ## Examples
 
 `xq '.targets'`

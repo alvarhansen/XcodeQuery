@@ -1,0 +1,68 @@
+name: Update Homebrew Tap
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-tap:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout XcodeQuery
+        uses: actions/checkout@v4
+
+      - name: Prepare variables
+        id: prep
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "tar_url=https://github.com/alvarhansen/XcodeQuery/archive/refs/tags/${TAG}.tar.gz" >> $GITHUB_OUTPUT
+
+      - name: Compute tarball sha256
+        id: sha
+        run: |
+          curl -L "${{ steps.prep.outputs.tar_url }}" -o source.tar.gz
+          SHASUM=$(shasum -a 256 source.tar.gz | awk '{print $1}')
+          echo "sha=$SHASUM" >> $GITHUB_OUTPUT
+
+      - name: Checkout tap repository
+        uses: actions/checkout@v4
+        with:
+          repository: alvarhansen/homebrew-xcodequery
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: tap
+
+      - name: Update formula in tap
+        working-directory: tap
+        run: |
+          mkdir -p Formula
+          cat > Formula/xq.rb <<'RUBY'
+class Xq < Formula
+  desc "Query and introspect Xcode projects from the CLI"
+  homepage "https://github.com/alvarhansen/XcodeQuery"
+  license "MIT"
+
+  url "__URL__"
+  sha256 "__SHA__"
+
+  head "https://github.com/alvarhansen/XcodeQuery.git", branch: "main"
+
+  depends_on xcode: :build
+
+  def install
+    system "swift", "build", "-c", "release"
+    bin.install ".build/release/xq"
+  end
+
+  test do
+    system bin/"xq", "--help"
+  end
+end
+RUBY
+          sed -i '' "s|__URL__|${{ steps.prep.outputs.tar_url }}|g" Formula/xq.rb
+          sed -i '' "s|__SHA__|${{ steps.sha.outputs.sha }}|g" Formula/xq.rb
+          git add Formula/xq.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update xq to ${{ steps.prep.outputs.tag }}" || echo "No changes to commit"
+          git push
