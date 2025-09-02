@@ -171,6 +171,12 @@ final class CLIIntegrationTests: XCTestCase {
         let preNames = Set(preOnly.compactMap { $0.name })
         XCTAssertTrue(preNames.contains("PreApp"))
         XCTAssertTrue(preNames.contains("PreLib"))
+
+        // pipeline: .targets[] | filter(.name == "App") | dependencies -> [Lib]
+        let (status17, stdout17, stderr17) = try Self.run(process: xqPath, args: [".targets[] | filter(.name == \"App\") | dependencies", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status17 != 0 { XCTFail("xq pipeline name equality failed (\(status17)):\nSTDERR: \(stderr17)\nSTDOUT: \(stdout17)"); return }
+        let depsByNameEq = try JSONDecoder().decode([Dep].self, from: stdout17.data(using: .utf8)!)
+        XCTAssertEqual(Set(depsByNameEq.map { $0.name }), ["Lib"])
     }
 
     // MARK: - Helpers

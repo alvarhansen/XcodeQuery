@@ -334,12 +334,21 @@ extension XcodeProjectQuery {
     private static func apply(predicate: String, to targets: [Target]) throws -> [Target] {
         // Support:
         // - .type == .unitTest
+        // - .name == "Text"
         // - .name.hasSuffix("Tests")
         // - .name | hasSuffix("Tests")
         if predicate.hasPrefix(".type == .") {
             let value = predicate.replacingOccurrences(of: ".type == .", with: "")
             if let t = TargetType(shortName: value) {
                 return targets.filter { $0.type == t }
+            }
+        }
+
+        if predicate.hasPrefix(".name == ") {
+            let rest = predicate.dropFirst(".name == ".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                let val = String(rest.dropFirst().dropLast())
+                return targets.filter { $0.name == val }
             }
         }
 
