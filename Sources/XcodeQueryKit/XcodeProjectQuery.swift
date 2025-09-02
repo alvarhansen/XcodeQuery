@@ -341,6 +341,7 @@ extension XcodeProjectQuery {
         // Support:
         // - .type == .unitTest
         // - .name == "Text"
+        // - .name ~= "Regex"
         // - .name.hasSuffix("Tests")
         // - .name | hasSuffix("Tests")
         if predicate.hasPrefix(".type == .") {
@@ -358,6 +359,14 @@ extension XcodeProjectQuery {
             }
         }
 
+        if predicate.hasPrefix(".name ~= ") {
+            let rest = predicate.dropFirst(".name ~= ".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                let pattern = String(rest.dropFirst().dropLast())
+                return targets.filter { Self.regexMatch($0.name, pattern) }
+            }
+        }
+
         if let suffix = extractHasSuffix(from: predicate) {
             return targets.filter { $0.name.hasSuffix(suffix) }
         }
@@ -369,8 +378,10 @@ extension XcodeProjectQuery {
         // Support:
         // - .stage == .pre | .post
         // - .name == "Text"
+        // - .name ~= "Regex"
         // - .name.hasPrefix("Text") or .name | hasPrefix("Text")
         // - .name.hasSuffix("Text") or .name | hasSuffix("Text")
+        // - .target == "Text" / .target ~= "Regex"
         let trimmed = predicate.trimmingCharacters(in: .whitespaces)
         if trimmed.hasPrefix(".stage == .") {
             let value = trimmed.replacingOccurrences(of: ".stage == .", with: "")
@@ -387,11 +398,25 @@ extension XcodeProjectQuery {
                 return scripts.filter { ($0.name ?? "") == val }
             }
         }
+        if trimmed.hasPrefix(".name ~= ") {
+            let rest = trimmed.dropFirst(".name ~= ".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                let pattern = String(rest.dropFirst().dropLast())
+                return scripts.filter { Self.regexMatch($0.name ?? "", pattern) }
+            }
+        }
         if trimmed.hasPrefix(".target == ") {
             let rest = trimmed.dropFirst(".target == ".count).trimmingCharacters(in: .whitespaces)
             if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
                 let val = String(rest.dropFirst().dropLast())
                 return scripts.filter { $0.target == val }
+            }
+        }
+        if trimmed.hasPrefix(".target ~= ") {
+            let rest = trimmed.dropFirst(".target ~= ".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                let pattern = String(rest.dropFirst().dropLast())
+                return scripts.filter { Self.regexMatch($0.target, pattern) }
             }
         }
         if let pfx = extractNameHasPrefix(from: predicate) {
@@ -412,6 +437,13 @@ extension XcodeProjectQuery {
                 return files.filter { $0.path == val }
             }
         }
+        if trimmed.hasPrefix(".path ~= ") {
+            let rest = trimmed.dropFirst(".path ~= ".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                let pattern = String(rest.dropFirst().dropLast())
+                return files.filter { Self.regexMatch($0.path, pattern) }
+            }
+        }
         if trimmed.hasPrefix(".target == ") {
             let rest = trimmed.dropFirst(".target == ".count).trimmingCharacters(in: .whitespaces)
             if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
@@ -419,7 +451,24 @@ extension XcodeProjectQuery {
                 return files.filter { $0.target == val }
             }
         }
+        if trimmed.hasPrefix(".target ~= ") {
+            let rest = trimmed.dropFirst(".target ~= ".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                let pattern = String(rest.dropFirst().dropLast())
+                return files.filter { Self.regexMatch($0.target, pattern) }
+            }
+        }
         throw Error.invalidQuery(predicate)
+    }
+
+    private static func regexMatch(_ text: String, _ pattern: String) -> Bool {
+        do {
+            let re = try NSRegularExpression(pattern: pattern)
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            return re.firstMatch(in: text, options: [], range: range) != nil
+        } catch {
+            return false
+        }
     }
 
     fileprivate static func sourceFiles(for target: PBXNativeTarget, mode: PathMode, projectPath: String) -> [String] {

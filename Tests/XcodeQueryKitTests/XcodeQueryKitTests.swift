@@ -251,6 +251,53 @@ final class XcodeQueryKitTests: XCTestCase {
             XCTAssertFalse(preLib.inputFileListPaths.isEmpty)
             XCTAssertFalse(preLib.outputFileListPaths.isEmpty)
         }
+
+        // REGEX: target name matches ^App(Tests)?$
+        do {
+            let any = try qp.evaluate(query: ".targets[] | filter(.name ~= \"^App(Tests)?$\")")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.Target].self, from: data)
+            let names = Set(results.map { $0.name })
+            XCTAssertTrue(names.contains("App"))
+            XCTAssertTrue(names.contains("AppTests"))
+            XCTAssertFalse(names.contains("AppUITests"))
+        }
+
+        // REGEX: sources path ends with .swift
+        do {
+            let any = try qp.evaluate(query: ".targets[] | sources | filter(.path ~= \"\\.swift$\")")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.SourceEntry].self, from: data)
+            XCTAssertTrue(results.contains(where: { $0.path.contains("AppFile.swift") }))
+            XCTAssertTrue(results.contains(where: { $0.path.contains("LibFile.swift") }))
+        }
+
+        // REGEX: sources target == ^Lib$
+        do {
+            let any = try qp.evaluate(query: ".targets[] | sources | filter(.target ~= \"^Lib$\")")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.SourceEntry].self, from: data)
+            XCTAssertTrue(results.allSatisfy { $0.target == "Lib" })
+        }
+
+        // REGEX: buildScripts name starts with Pre
+        do {
+            let any = try qp.evaluate(query: ".targets[] | buildScripts | filter(.name ~= \"^Pre\")")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.BuildScriptEntry].self, from: data)
+            let names = Set(results.compactMap { $0.name })
+            XCTAssertTrue(names.contains("PreApp"))
+            XCTAssertTrue(names.contains("PreLib"))
+            XCTAssertFalse(names.contains("PostApp"))
+        }
+
+        // LITERAL equality must not require escaping '.' in filename
+        do {
+            let any = try qp.evaluate(query: ".targets[] | sources | filter(.path == \"LibFile.swift\")")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([XcodeQueryKit.SourceEntry].self, from: data)
+            XCTAssertTrue(results.contains(where: { $0.path == "Lib/Sources/LibFile.swift" || $0.path == "LibFile.swift" }))
+        }
     }
 }
 

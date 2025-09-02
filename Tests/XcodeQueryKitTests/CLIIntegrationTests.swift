@@ -177,6 +177,12 @@ final class CLIIntegrationTests: XCTestCase {
         if status17 != 0 { XCTFail("xq pipeline name equality failed (\(status17)):\nSTDERR: \(stderr17)\nSTDOUT: \(stdout17)"); return }
         let depsByNameEq = try JSONDecoder().decode([Dep].self, from: stdout17.data(using: .utf8)!)
         XCTAssertEqual(Set(depsByNameEq.map { $0.name }), ["Lib"])
+
+        // pipeline: sources regex filter by path contains 'App' -> contains AppFile.swift
+        let (status18, stdout18, stderr18) = try Self.run(process: xqPath, args: [".targets[] | sources | filter(.path ~= \"App.*\\.swift\")", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        if status18 != 0 { XCTFail("xq sources regex filter failed (\(status18)):\nSTDERR: \(stderr18)\nSTDOUT: \(stdout18)"); return }
+        let srcRegex = try JSONDecoder().decode([Src].self, from: stdout18.data(using: .utf8)!)
+        XCTAssertTrue(srcRegex.contains(where: { $0.path.contains("AppFile.swift") }))
     }
 
     // MARK: - Helpers
