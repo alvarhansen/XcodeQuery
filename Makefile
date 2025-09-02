@@ -16,3 +16,6 @@ release:
 xq-bin:
 	@swift build -c debug --show-bin-path | { read bin; echo "$$bin/xq"; }
 
+# Install via local Homebrew formula (builds release and links to Homebrew prefix)
+brew-local:
+	brew install --build-from-source --formula ./HomebrewFormula/xq.rb
