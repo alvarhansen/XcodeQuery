@@ -61,6 +61,9 @@ public class XcodeProjectQuery {
                             }
                         }
                     }
+                    if let sf = pipeline.sourcesFilter {
+                        out = try Self.applySourcePredicate(sf, to: out)
+                    }
                     return AnyEncodable(out.sorted { $0.target == $1.target ? $0.path < $1.path : $0.target < $1.target })
                 case .targetMembership:
                     // Given selected targets, compute their sources then map to owners
@@ -268,14 +271,15 @@ extension XcodeProjectQuery {
     }
 
     // Parse a pipeline that starts with .targets[] and optionally includes filter and dependencies/dependents
-    fileprivate static func parseTargetsPipeline(_ query: String) -> (filterPredicate: String?, operation: PipelineOp?, scriptsFilter: String?)? {
+    fileprivate static func parseTargetsPipeline(_ query: String) -> (filterPredicate: String?, operation: PipelineOp?, scriptsFilter: String?, sourcesFilter: String?)? {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix(".targets[]") else { return nil }
         let remainder = trimmed.dropFirst(".targets[]".count)
-        if remainder.trimmingCharacters(in: .whitespaces).isEmpty { return (nil, nil, nil) }
+        if remainder.trimmingCharacters(in: .whitespaces).isEmpty { return (nil, nil, nil, nil) }
         let tokens = remainder.split(separator: "|", omittingEmptySubsequences: true).map { $0.trimmingCharacters(in: .whitespaces) }
         var filterPred: String?
         var scriptsFilter: String?
+        var sourcesFilter: String?
         var op: PipelineOp?
         var lastKind: PipelineOp.Kind?
         var lastSourcesMode: PathMode?
@@ -284,6 +288,8 @@ extension XcodeProjectQuery {
                 let inner = tok.dropFirst("filter(".count).dropLast()
                 if lastKind == .buildScripts {
                     scriptsFilter = String(inner).trimmingCharacters(in: .whitespaces)
+                } else if lastKind == .sources {
+                    sourcesFilter = String(inner).trimmingCharacters(in: .whitespaces)
                 } else {
                     filterPred = String(inner).trimmingCharacters(in: .whitespaces)
                 }
@@ -312,7 +318,7 @@ extension XcodeProjectQuery {
                 return nil
             }
         }
-        return (filterPred, op, scriptsFilter)
+        return (filterPred, op, scriptsFilter, sourcesFilter)
     }
 
     // Extracts a single string argument from a function-like query, e.g.
@@ -381,11 +387,37 @@ extension XcodeProjectQuery {
                 return scripts.filter { ($0.name ?? "") == val }
             }
         }
+        if trimmed.hasPrefix(".target == ") {
+            let rest = trimmed.dropFirst(".target == ".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                let val = String(rest.dropFirst().dropLast())
+                return scripts.filter { $0.target == val }
+            }
+        }
         if let pfx = extractNameHasPrefix(from: predicate) {
             return scripts.filter { ($0.name ?? "").hasPrefix(pfx) }
         }
         if let sfx = extractHasSuffix(from: predicate) {
             return scripts.filter { ($0.name ?? "").hasSuffix(sfx) }
+        }
+        throw Error.invalidQuery(predicate)
+    }
+
+    private static func applySourcePredicate(_ predicate: String, to files: [SourceEntry]) throws -> [SourceEntry] {
+        let trimmed = predicate.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix(".path == ") {
+            let rest = trimmed.dropFirst(".path == ".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                let val = String(rest.dropFirst().dropLast())
+                return files.filter { $0.path == val }
+            }
+        }
+        if trimmed.hasPrefix(".target == ") {
+            let rest = trimmed.dropFirst(".target == ".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                let val = String(rest.dropFirst().dropLast())
+                return files.filter { $0.target == val }
+            }
         }
         throw Error.invalidQuery(predicate)
     }
