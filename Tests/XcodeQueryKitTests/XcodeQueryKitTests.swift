@@ -14,10 +14,14 @@ final class XcodeQueryKitTests: XCTestCase {
         // Create some source files for targets
         try FileManager.default.createDirectory(atPath: tmp.path + "/Lib/Sources", withIntermediateDirectories: true)
         try "// lib".write(toFile: tmp.path + "/Lib/Sources/LibFile.swift", atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(atPath: tmp.path + "/Lib/Resources", withIntermediateDirectories: true)
+        try "{\n  \"k\": \"v\"\n}".write(toFile: tmp.path + "/Lib/Resources/LibConfig.json", atomically: true, encoding: .utf8)
         try FileManager.default.createDirectory(atPath: tmp.path + "/Shared", withIntermediateDirectories: true)
         try "// shared".write(toFile: tmp.path + "/Shared/Shared.swift", atomically: true, encoding: .utf8)
         try FileManager.default.createDirectory(atPath: tmp.path + "/App/Sources", withIntermediateDirectories: true)
         try "// app".write(toFile: tmp.path + "/App/Sources/AppFile.swift", atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(atPath: tmp.path + "/App/Resources", withIntermediateDirectories: true)
+        try "{}".write(toFile: tmp.path + "/App/Resources/AppConfig.json", atomically: true, encoding: .utf8)
 
         let project = Project(
             basePath: Path(tmp.path),
@@ -27,7 +31,11 @@ final class XcodeQueryKitTests: XCTestCase {
                     name: "Lib",
                     type: .framework,
                     platform: .iOS,
-                    sources: [TargetSource(path: "Lib/Sources"), TargetSource(path: "Shared/Shared.swift")],
+                    sources: [
+                        TargetSource(path: "Lib/Sources"),
+                        TargetSource(path: "Shared/Shared.swift"),
+                        TargetSource(path: "Lib/Resources/LibConfig.json", buildPhase: .resources),
+                    ],
                     preBuildScripts: [BuildScript(script: .script("echo pre-lib"), name: "PreLib", inputFiles: ["$(SRCROOT)/pre.in"], outputFiles: ["$(SRCROOT)/pre.out"], inputFileLists: ["$(SRCROOT)/preInputs.xcfilelist"], outputFileLists: ["$(SRCROOT)/preOutputs.xcfilelist"])],
                     postBuildScripts: [BuildScript(script: .script("echo post-lib"), name: "PostLib", inputFiles: ["$(SRCROOT)/post.in"], outputFiles: ["$(SRCROOT)/post.out"])]
                 ),
@@ -35,7 +43,11 @@ final class XcodeQueryKitTests: XCTestCase {
                     name: "App",
                     type: .application,
                     platform: .iOS,
-                    sources: [TargetSource(path: "App/Sources"), TargetSource(path: "Shared/Shared.swift")],
+                    sources: [
+                        TargetSource(path: "App/Sources"),
+                        TargetSource(path: "Shared/Shared.swift"),
+                        TargetSource(path: "App/Resources/AppConfig.json", buildPhase: .resources),
+                    ],
                     dependencies: [Dependency(type: .target, reference: "Lib")],
                     preBuildScripts: [BuildScript(script: .script("echo pre-app"), name: "PreApp")],
                     postBuildScripts: [BuildScript(script: .script("echo post-app"), name: "PostApp")]
@@ -297,6 +309,21 @@ final class XcodeQueryKitTests: XCTestCase {
             let data = try JSONEncoder().encode(any)
             let results = try JSONDecoder().decode([XcodeQueryKit.SourceEntry].self, from: data)
             XCTAssertTrue(results.contains(where: { $0.path == "Lib/Sources/LibFile.swift" || $0.path == "LibFile.swift" }))
+        }
+
+        // RESOURCES: direct call and pipeline with filters
+        do {
+            let any = try qp.evaluate(query: ".resources(\"App\")")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([ResourceEntry].self, from: data)
+            XCTAssertTrue(results.contains(where: { $0.target == "App" && $0.path.contains("AppConfig.json") }))
+        }
+
+        do {
+            let any = try qp.evaluate(query: ".targets[] | resources | filter(.path == \"LibConfig.json\")")
+            let data = try JSONEncoder().encode(any)
+            let results = try JSONDecoder().decode([ResourceEntry].self, from: data)
+            XCTAssertTrue(results.contains(where: { $0.target == "Lib" && ($0.path == "Lib/Resources/LibConfig.json" || $0.path == "LibConfig.json") }))
         }
     }
 }

@@ -100,3 +100,13 @@ Planned behavior if implemented
 - Filter script stage or name in pipeline:
   - Pre-build scripts: `xq '.targets[] | buildScripts | filter(.stage == .pre)'`
   - Name prefix: `xq '.targets[] | buildScripts | filter(.name.hasPrefix("Pre"))'`
+
+Resources (Copy Bundle Resources)
+
+- Per-target resources: `xq '.resources("App")'`
+- With path mode: `xq '.resources("App", pathMode: "normalized")'`
+- Pipeline: `xq '.targets[] | resources'`
+- Filter examples:
+  - Exact filename: `xq '.targets[] | resources | filter(.path == "Info.plist")'`
+  - Regex (JSON files): `xq '.targets[] | resources | filter(.path ~= "\\.json$")'`
+  - Filter by owning target: `xq '.targets[] | resources | filter(.target == "Lib")'`

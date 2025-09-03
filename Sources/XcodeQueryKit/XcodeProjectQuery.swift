@@ -36,6 +36,8 @@ public class XcodeProjectQuery {
         // - .filesWithoutTargets
         // - .buildScripts("TargetName")
         // - .targets[] | buildScripts
+        // - .resources("TargetName")
+        // - .targets[] | resources(pathMode: "fileRef|absolute|normalized")
         if query == ".targets" || query == ".targets[]" {
             return AnyEncodable(targets)
         }
@@ -89,6 +91,19 @@ public class XcodeProjectQuery {
                         scripts = try Self.applyScriptPredicate(sp, to: scripts)
                     }
                     return AnyEncodable(scripts)
+                case .resources:
+                    var entries: [ResourceEntry] = []
+                    for t in current {
+                        if let nt = proj.pbxproj.nativeTargets.first(where: { $0.name == t.name }) {
+                            for p in Self.resourceFiles(for: nt, mode: op.pathMode ?? .fileRef, projectPath: projectPath) {
+                                entries.append(ResourceEntry(target: t.name, path: p))
+                            }
+                        }
+                    }
+                    if let rf = pipeline.resourcesFilter {
+                        entries = try Self.applyResourcePredicate(rf, to: entries)
+                    }
+                    return AnyEncodable(entries)
                 default:
                     let graph = DependencyGraph(project: proj)
                     // union dependencies/dependents for all selected targets
@@ -101,7 +116,7 @@ public class XcodeProjectQuery {
                             resolved = (try? graph.dependencies(of: baseName, recursive: op.recursive)) ?? []
                         case .dependents:
                             resolved = (try? graph.dependents(of: baseName, recursive: op.recursive)) ?? []
-                        case .sources, .targetMembership, .buildScripts:
+                        case .sources, .targetMembership, .buildScripts, .resources:
                             resolved = [] // unreachable
                         }
                         for r in resolved {
@@ -157,6 +172,14 @@ public class XcodeProjectQuery {
             return AnyEncodable(Self.collectBuildScripts(for: base))
         }
 
+        if let rc = Self.extractResourcesCall(from: query) {
+            guard let base = proj.pbxproj.nativeTargets.first(where: { $0.name == rc.name }) else {
+                throw Error.invalidQuery("Unknown target: \(rc.name)")
+            }
+            let files = Self.resourceFiles(for: base, mode: rc.mode, projectPath: projectPath)
+            return AnyEncodable(files.map { ResourceEntry(target: base.name, path: $0) })
+        }
+
         throw Error.invalidQuery(query)
     }
 }
@@ -189,6 +212,11 @@ struct BuildScriptEntry: Codable, Equatable {
         case pre
         case post
     }
+}
+
+struct ResourceEntry: Codable, Equatable {
+    var target: String
+    var path: String
 }
 
 enum TargetType: String, Codable, Equatable {
@@ -242,7 +270,7 @@ public struct AnyEncodable: Encodable {
 
 extension XcodeProjectQuery {
     struct PipelineOp {
-        enum Kind { case dependencies, dependents, sources, targetMembership, buildScripts }
+        enum Kind { case dependencies, dependents, sources, targetMembership, buildScripts, resources }
         let kind: Kind
         let recursive: Bool
         let pathMode: PathMode?
@@ -271,11 +299,11 @@ extension XcodeProjectQuery {
     }
 
     // Parse a pipeline that starts with .targets[] and optionally includes filter and dependencies/dependents
-    fileprivate static func parseTargetsPipeline(_ query: String) -> (filterPredicate: String?, operation: PipelineOp?, scriptsFilter: String?, sourcesFilter: String?)? {
+    fileprivate static func parseTargetsPipeline(_ query: String) -> (filterPredicate: String?, operation: PipelineOp?, scriptsFilter: String?, sourcesFilter: String?, resourcesFilter: String?)? {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix(".targets[]") else { return nil }
         let remainder = trimmed.dropFirst(".targets[]".count)
-        if remainder.trimmingCharacters(in: .whitespaces).isEmpty { return (nil, nil, nil, nil) }
+        if remainder.trimmingCharacters(in: .whitespaces).isEmpty { return (nil, nil, nil, nil, nil) }
         let tokens = remainder.split(separator: "|", omittingEmptySubsequences: true).map { $0.trimmingCharacters(in: .whitespaces) }
         var filterPred: String?
         var scriptsFilter: String?
@@ -283,6 +311,7 @@ extension XcodeProjectQuery {
         var op: PipelineOp?
         var lastKind: PipelineOp.Kind?
         var lastSourcesMode: PathMode?
+        var resourcesFilter: String?
         for tok in tokens {
             if tok.hasPrefix("filter("), tok.hasSuffix(")") {
                 let inner = tok.dropFirst("filter(".count).dropLast()
@@ -290,6 +319,8 @@ extension XcodeProjectQuery {
                     scriptsFilter = String(inner).trimmingCharacters(in: .whitespaces)
                 } else if lastKind == .sources {
                     sourcesFilter = String(inner).trimmingCharacters(in: .whitespaces)
+                } else if lastKind == .resources {
+                    resourcesFilter = String(inner).trimmingCharacters(in: .whitespaces)
                 } else {
                     filterPred = String(inner).trimmingCharacters(in: .whitespaces)
                 }
@@ -313,12 +344,16 @@ extension XcodeProjectQuery {
             } else if tok == "buildScripts" {
                 op = PipelineOp(kind: .buildScripts)
                 lastKind = .buildScripts
+            } else if tok == "resources" || tok.hasPrefix("resources(") {
+                let mode = parseSourcesMode(tok)
+                op = PipelineOp(kind: .resources, recursive: false, pathMode: mode ?? lastSourcesMode)
+                lastKind = .resources
             } else if tok.isEmpty { continue } else {
                 // unknown token, bail
                 return nil
             }
         }
-        return (filterPred, op, scriptsFilter, sourcesFilter)
+        return (filterPred, op, scriptsFilter, sourcesFilter, resourcesFilter)
     }
 
     // Extracts a single string argument from a function-like query, e.g.
@@ -461,6 +496,39 @@ extension XcodeProjectQuery {
         throw Error.invalidQuery(predicate)
     }
 
+    private static func applyResourcePredicate(_ predicate: String, to files: [ResourceEntry]) throws -> [ResourceEntry] {
+        let trimmed = predicate.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix(".path == ") {
+            let rest = trimmed.dropFirst(".path == ".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                let val = String(rest.dropFirst().dropLast())
+                return files.filter { $0.path == val }
+            }
+        }
+        if trimmed.hasPrefix(".path ~= ") {
+            let rest = trimmed.dropFirst(".path ~= ".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                let pattern = String(rest.dropFirst().dropLast())
+                return files.filter { Self.regexMatch($0.path, pattern) }
+            }
+        }
+        if trimmed.hasPrefix(".target == ") {
+            let rest = trimmed.dropFirst(".target == ".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                let val = String(rest.dropFirst().dropLast())
+                return files.filter { $0.target == val }
+            }
+        }
+        if trimmed.hasPrefix(".target ~= ") {
+            let rest = trimmed.dropFirst(".target ~= ".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                let pattern = String(rest.dropFirst().dropLast())
+                return files.filter { Self.regexMatch($0.target, pattern) }
+            }
+        }
+        throw Error.invalidQuery(predicate)
+    }
+
     private static func regexMatch(_ text: String, _ pattern: String) -> Bool {
         do {
             let re = try NSRegularExpression(pattern: pattern)
@@ -545,6 +613,59 @@ extension XcodeProjectQuery {
             result.append(entry)
         }
         return result
+    }
+
+    fileprivate static func resourceFiles(for target: PBXNativeTarget, mode: PathMode, projectPath: String) -> [String] {
+        let phases = target.buildPhases.compactMap { $0 as? PBXResourcesBuildPhase }
+        var results: [String] = []
+        let projDirURL = URL(fileURLWithPath: projectPath).deletingLastPathComponent()
+        let projectRoot = projDirURL.path
+        let stdProjectRoot = URL(fileURLWithPath: projectRoot).standardizedFileURL.path
+        for p in phases {
+            for f in p.files ?? [] {
+                if let fr = f.file as? PBXFileReference {
+                    let ref = fr.path ?? fr.name ?? ""
+                    switch mode {
+                    case .fileRef:
+                        results.append(ref)
+                    case .absolute:
+                        if let fullStr = (try? fr.fullPath(sourceRoot: projectRoot)) ?? nil {
+                            let stdFull = URL(fileURLWithPath: fullStr).standardizedFileURL.path
+                            results.append(stdFull)
+                        } else if ref.hasPrefix("/") {
+                            results.append(URL(fileURLWithPath: ref).standardizedFileURL.path)
+                        } else {
+                            let abs = projDirURL.appendingPathComponent(ref).standardizedFileURL.path
+                            results.append(abs)
+                        }
+                    case .normalized:
+                        if let fullStr = (try? fr.fullPath(sourceRoot: projectRoot)) ?? nil {
+                            let stdFull = URL(fileURLWithPath: fullStr).standardizedFileURL.path
+                            if stdFull.hasPrefix(stdProjectRoot + "/") {
+                                results.append(String(stdFull.dropFirst(stdProjectRoot.count + 1)))
+                            } else {
+                                results.append(stdFull)
+                            }
+                        } else if ref.hasPrefix("/") {
+                            let stdRef = URL(fileURLWithPath: ref).standardizedFileURL.path
+                            if stdRef.hasPrefix(stdProjectRoot + "/") {
+                                results.append(String(stdRef.dropFirst(stdProjectRoot.count + 1)))
+                            } else {
+                                results.append(stdRef)
+                            }
+                        } else {
+                            let rel = URL(fileURLWithPath: ref, relativeTo: projDirURL).standardizedFileURL.path
+                            if rel.hasPrefix(stdProjectRoot + "/") {
+                                results.append(String(rel.dropFirst(stdProjectRoot.count + 1)))
+                            } else {
+                                results.append(ref)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return results
     }
 
     private static func extractHasSuffix(from predicate: String) -> String? {
@@ -686,6 +807,21 @@ extension XcodeProjectQuery {
 
     fileprivate static func extractBuildScriptsCall(from query: String) -> String? {
         extractFunctionArg(from: query, function: ".buildScripts")
+    }
+
+    fileprivate static func extractResourcesCall(from query: String) -> (name: String, mode: PathMode)? {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix(".resources(") && trimmed.hasSuffix(")") else { return nil }
+        let inner = trimmed.dropFirst(".resources(".count).dropLast()
+        let items = inner.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: true)
+        guard let first = items.first else { return nil }
+        let name = stripQuotes(String(first).trimmingCharacters(in: .whitespaces))
+        var mode: PathMode = .fileRef
+        if items.count == 2 {
+            let arg = String(items[1]).trimmingCharacters(in: .whitespaces)
+            if let parsed = parsePathMode(from: arg) { mode = parsed }
+        }
+        return (name: name, mode: mode)
     }
 
     private static func extractFunctionArgs(from query: String, function: String) -> (name: String, recursive: Bool)? {
