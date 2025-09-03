@@ -124,7 +124,11 @@ public class XcodeProjectQuery {
                             byName[mapped.name] = mapped
                         }
                     }
-                    return AnyEncodable(Array(byName.values).sorted { $0.name < $1.name })
+                    var deps = Array(byName.values).sorted { $0.name < $1.name }
+                    if op.kind == .dependencies, let df = pipeline.dependenciesFilter {
+                        deps = try Self.applyDependencyPredicate(df, to: deps)
+                    }
+                    return AnyEncodable(deps)
                 }
             } else {
                 return AnyEncodable(current)
@@ -299,11 +303,11 @@ extension XcodeProjectQuery {
     }
 
     // Parse a pipeline that starts with .targets[] and optionally includes filter and dependencies/dependents
-    fileprivate static func parseTargetsPipeline(_ query: String) -> (filterPredicate: String?, operation: PipelineOp?, scriptsFilter: String?, sourcesFilter: String?, resourcesFilter: String?)? {
+    fileprivate static func parseTargetsPipeline(_ query: String) -> (filterPredicate: String?, operation: PipelineOp?, scriptsFilter: String?, sourcesFilter: String?, resourcesFilter: String?, dependenciesFilter: String?)? {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix(".targets[]") else { return nil }
         let remainder = trimmed.dropFirst(".targets[]".count)
-        if remainder.trimmingCharacters(in: .whitespaces).isEmpty { return (nil, nil, nil, nil, nil) }
+        if remainder.trimmingCharacters(in: .whitespaces).isEmpty { return (filterPredicate: nil, operation: nil, scriptsFilter: nil, sourcesFilter: nil, resourcesFilter: nil, dependenciesFilter: nil) }
         let tokens = remainder.split(separator: "|", omittingEmptySubsequences: true).map { $0.trimmingCharacters(in: .whitespaces) }
         var filterPred: String?
         var scriptsFilter: String?
@@ -312,15 +316,18 @@ extension XcodeProjectQuery {
         var lastKind: PipelineOp.Kind?
         var lastSourcesMode: PathMode?
         var resourcesFilter: String?
+        var dependenciesFilter: String?
         for tok in tokens {
             if tok.hasPrefix("filter("), tok.hasSuffix(")") {
                 let inner = tok.dropFirst("filter(".count).dropLast()
                 if lastKind == .buildScripts {
-                    scriptsFilter = String(inner).trimmingCharacters(in: .whitespaces)
+                    scriptsFilter = normalizeBracketPredicate(String(inner).trimmingCharacters(in: .whitespaces), prefix: ".buildScripts[]")
                 } else if lastKind == .sources {
-                    sourcesFilter = String(inner).trimmingCharacters(in: .whitespaces)
+                    sourcesFilter = normalizeBracketPredicate(String(inner).trimmingCharacters(in: .whitespaces), prefix: ".sources[]")
                 } else if lastKind == .resources {
-                    resourcesFilter = String(inner).trimmingCharacters(in: .whitespaces)
+                    resourcesFilter = normalizeBracketPredicate(String(inner).trimmingCharacters(in: .whitespaces), prefix: ".resources[]")
+                } else if lastKind == .dependencies {
+                    dependenciesFilter = normalizeBracketPredicate(String(inner).trimmingCharacters(in: .whitespaces), prefix: ".dependencies[]")
                 } else {
                     filterPred = String(inner).trimmingCharacters(in: .whitespaces)
                 }
@@ -353,7 +360,7 @@ extension XcodeProjectQuery {
                 return nil
             }
         }
-        return (filterPred, op, scriptsFilter, sourcesFilter, resourcesFilter)
+        return (filterPred, op, scriptsFilter, sourcesFilter, resourcesFilter, dependenciesFilter)
     }
 
     // Extracts a single string argument from a function-like query, e.g.
@@ -491,6 +498,31 @@ extension XcodeProjectQuery {
             if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
                 let pattern = String(rest.dropFirst().dropLast())
                 return files.filter { Self.regexMatch($0.target, pattern) }
+            }
+        }
+        throw Error.invalidQuery(predicate)
+    }
+
+    private static func applyDependencyPredicate(_ predicate: String, to deps: [Target]) throws -> [Target] {
+        let trimmed = predicate.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix(".name == ") {
+            let rest = trimmed.dropFirst(".name == ".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                let val = String(rest.dropFirst().dropLast())
+                return deps.filter { $0.name == val }
+            }
+        }
+        if trimmed.hasPrefix(".name ~= ") {
+            let rest = trimmed.dropFirst(".name ~= ".count).trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                let pattern = String(rest.dropFirst().dropLast())
+                return deps.filter { Self.regexMatch($0.name, pattern) }
+            }
+        }
+        if trimmed.hasPrefix(".type == .") {
+            let val = trimmed.replacingOccurrences(of: ".type == .", with: "")
+            if let t = TargetType(shortName: val) {
+                return deps.filter { $0.type == t }
             }
         }
         throw Error.invalidQuery(predicate)
@@ -854,6 +886,14 @@ extension XcodeProjectQuery {
             return lower.contains("true")
         }
         return false
+    }
+
+    private static func normalizeBracketPredicate(_ expr: String, prefix: String) -> String {
+        if expr.hasPrefix(prefix) {
+            let rest = expr.dropFirst(prefix.count)
+            return String(rest)
+        }
+        return expr
     }
 }
 
