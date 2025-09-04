@@ -1,5 +1,7 @@
 # Xcode Query
 
+Xcode Query (xq) now uses a GraphQL-style query language for predictable, composable queries against your Xcode project. Results are JSON and shaped by your selection set.
+
 ## Install via Homebrew
 
 - Stable (once a version is tagged and formula updated):
@@ -13,107 +15,92 @@
 
 After install, verify: `xq --help`
 
-## Query Language
+## Usage
 
-- Targets list:
-  - `xq '.targets'`
-  - `xq '.targets[] | filter(.type == .unitTest)'`
-  - `xq '.targets[] | filter(.name.hasSuffix("Tests"))'`
-  - `xq '.targets[] | filter(.name | hasSuffix("Tests"))'`
+- Run against the project in the current directory: `xq '{ targets { name type } }'`
+- Or specify a project: `xq '{ targets { name } }' --project MyApp.xcodeproj`
 
-- Enriched per-target stages (default after ops):
-  - `.targets[] | sources` → `[{ name, type, sources: [String] }]`
-  - `.targets[] | resources` → `[{ name, type, resources: [String] }]`
-  - `.targets[] | dependencies` → `[{ name, type, dependencies: [{name,type}] }]`
-  - `.targets[] | buildScripts` → `[{ name, type, buildScripts: [{ name?, stage, inputPaths, …}] }]`
+## Schema Overview
 
-- Bracket selectors for nested filtering (AND/OR in one filter):
-  - Paths/names/types: `.sources[].path`, `.resources[].path`, `.dependencies[].name`, `.dependencies[].type`, `.buildScripts[].name`, `.buildScripts[].stage`
-  - Example:
-    - `xq '.targets[] | sources(pathMode: "normalized") | dependencies | filter(.sources[].path ~= "\\.swift$" && .dependencies[].name == "Lib")'`
+Top-level fields (selection required):
+- `targets(type: TargetType, filter: TargetFilter): [Target!]!`
+- `target(name: String!): Target`
+- `dependencies(name: String!, recursive: Boolean = false, filter: TargetFilter): [Target!]!`
+- `dependents(name: String!, recursive: Boolean = false, filter: TargetFilter): [Target!]!`
+- Flat views:
+  - `targetSources(pathMode: PathMode = FILE_REF, filter: SourceFilter): [TargetSource!]!`
+  - `targetResources(pathMode: PathMode = FILE_REF, filter: ResourceFilter): [TargetResource!]!`
+  - `targetDependencies(recursive: Boolean = false, filter: TargetFilter): [TargetDependency!]!`
+  - `targetBuildScripts(filter: BuildScriptFilter): [TargetBuildScript!]!`
+  - `targetMembership(path: String!, pathMode: PathMode = FILE_REF): TargetMembership!`
 
-- Flatten when you need flat output:
-  - `... | flatten(.sources)` → `[{ target, path }]`
-  - `... | flatten(.resources)` → `[{ target, path }]`
-  - `... | flatten(.dependencies)` → `[{ target, name, type }]`
-  - `... | flatten(.buildScripts)` → `[{ target, …script fields… }]`
+Types and inputs:
+- `type Target { name, type, dependencies(recursive, filter), sources(pathMode, filter), resources(pathMode, filter), buildScripts(filter) }`
+- `type BuildScript { name, stage, inputPaths, outputPaths, inputFileListPaths, outputFileListPaths }`
+- Views: `TargetSource { target, path }`, `TargetResource { target, path }`, `TargetDependency { target, name, type }`, `TargetBuildScript { target, ... }`, `TargetMembership { path, targets }`
+- `enum TargetType { APP, FRAMEWORK, STATIC_LIBRARY, DYNAMIC_LIBRARY, UNIT_TEST, UI_TEST, EXTENSION, BUNDLE, COMMAND_LINE_TOOL, WATCH_APP, WATCH2_APP, TV_APP, OTHER }`
+- `enum PathMode { FILE_REF, ABSOLUTE, NORMALIZED }`
+- `enum ScriptStage { PRE, POST }`
+- Filters:
+  - `input TargetFilter { name: StringMatch, type: TargetType }`
+  - `input SourceFilter { path: StringMatch, target: StringMatch }`
+  - `input ResourceFilter { path: StringMatch, target: StringMatch }`
+  - `input BuildScriptFilter { stage: ScriptStage, name: StringMatch, target: StringMatch }`
+  - `input StringMatch { eq: String, regex: String, prefix: String, suffix: String, contains: String }`
 
-### Reverse dependencies and dependency queries
+## Examples
 
-- Direct deps of a target: `xq '.dependencies("App")'`
-- Transitive deps of a target: `xq '.dependencies("App", recursive: true)'`
-- Reverse deps (who depends on): `xq '.dependents("Lib")'`
-- Reverse deps alias: `xq '.reverseDependencies("Lib")'` or `xq '.rdeps("Lib")'`
-- Pipeline (enriched): `xq '.targets[] | filter(.type == .unitTest) | dependencies(recursive: true)'`
-  - Use bracket selectors to filter by dependency fields:
-  - `xq '.targets[] | dependencies | filter(.dependencies[].name ~= "^App$")'`
+- List targets and types:
+  - `xq '{ targets { name type } }'`
 
-### Source files
+- Unit test targets only:
+  - `xq '{ targets(type: UNIT_TEST) { name } }'`
 
-- Direct call (flat): `xq '.sources("App")'`
-- Pipeline (enriched): `xq '.targets[] | filter(.type == .framework) | sources'`
-  - Filter nested with brackets: `xq '.targets[] | sources | filter(.sources[].path ~= "\\.swift$")'`
-  - Get flat list: `xq '.targets[] | sources | flatten(.sources)'`
+- Targets with name ending in "Tests":
+  - `xq '{ targets(filter: { name: { suffix: "Tests" } }) { name } }'`
 
-Notes
+- Dependencies of a target:
+  - Direct: `xq '{ dependencies(name: "App") { name type } }'`
+  - Transitive: `xq '{ dependencies(name: "App", recursive: true) { name } }'`
+  - Reverse (who depends on): `xq '{ dependents(name: "Lib") { name } }'`
 
-- Direct calls like `.sources("App")` return file reference paths by default. See Path options below.
+- Per-target dependencies (nested):
+  - `xq '{ targets(type: UNIT_TEST) { name dependencies(recursive: true) { name } } }'`
 
-### Target membership
+- Sources
+  - Nested, normalized Swift only:
+    - `xq '{ targets(type: FRAMEWORK) { name sources(pathMode: NORMALIZED, filter: { path: { regex: "\\.swift$" }}) { path } } }'`
+  - Flat, normalized (easy to pipe):
+    - `xq '{ targetSources(pathMode: NORMALIZED) { target path } }'`
 
-- Targets for a file: `xq '.targetMembership("Shared/Shared.swift")'`
-- With path mode: `xq '.targetMembership("Shared/Shared.swift", pathMode: "normalized")'`
-- Pipeline: `xq '.targets[] | sources(pathMode: "normalized") | targetMembership'` (returns each file with the targets it belongs to)
+- Resources (Copy Bundle Resources)
+  - Per-target JSON resources:
+    - `xq '{ targets { name resources(filter: { path: { regex: "\\.json$" }}) { path } } }'`
+  - Flat list, exact filename:
+    - `xq '{ targetResources { target path } }' | jq '.targetResources | map(select(.path == "Info.plist"))'`
 
-### jq examples
+- Build scripts
+  - Nested for frameworks, pre stage:
+    - `xq '{ targets(type: FRAMEWORK) { name buildScripts(filter: { stage: PRE }) { name stage inputPaths } } }'`
+  - Flat with stage filter:
+    - `xq '{ targetBuildScripts(filter: { stage: PRE }) { target name stage } }'`
 
-- Files used by multiple targets (normalized paths):
-  - `xq '.targets[] | sources(pathMode: "normalized") | targetMembership' --project MyApp.xcodeproj | jq -r '.[] | select(.targets | length > 1) | "\(.path) -> \(.targets|join(", "))"'`
+- Target membership for a file
+  - `xq '{ targetMembership(path: "Shared/Shared.swift", pathMode: NORMALIZED) { path targets } }'`
 
-- Files not in any target (absolute paths):
-  - `find "$(pwd)" \( -name "*.swift" -o -name "*.m" -o -name "*.mm" -o -name "*.c" -o -name "*.cc" -o -name "*.cpp" \) -not -path "$(pwd)/.build/*" -not -path "$(pwd)/**/*.xcodeproj/*" -print0 | xargs -0 -n1 -I{} sh -c 'xq ".targetMembership(\"{}\", pathMode: \"absolute\")" --project MyApp.xcodeproj' | jq -s '. | map(select(.targets | length == 0))'`
+## jq Recipes
 
-### Path options
+- Files used by multiple targets (normalized):
+  - `xq '{ targetSources(pathMode: NORMALIZED) { target path } }' --project MyApp.xcodeproj | jq '.targetSources | group_by(.path) | map(select(length > 1) | { path: .[0].path, targets: map(.target) })'`
 
-- Control path formatting for `sources`, `resources`, and `targetMembership` via `pathMode`:
-  - Absolute paths: `xq '.sources("App", pathMode: "absolute")'`
-  - Normalized to project root: `xq '.sources("App", pathMode: "normalized")'`
-  - Pipeline variant: `xq '.targets[] | filter(.type == .framework) | sources(pathMode: "normalized") | targetMembership'`
-- Modes:
-  - `fileRef`: raw `PBXFileReference.path`/`name` (default)
-  - `absolute`: fully-resolved absolute path
-  - `normalized`: relative to project root
+- Files not in any target (absolute):
+  - `find "$(pwd)" \( -name "*.swift" -o -name "*.m" -o -name "*.mm" -o -name "*.c" -o -name "*.cc" -o -name "*.cpp" \) -not -path "$(pwd)/.build/*" -not -path "$(pwd)/**/*.xcodeproj/*" -print0 | xargs -0 -n1 -I{} sh -c 'xq "{ targetMembership(path: \"{}\", pathMode: ABSOLUTE) { path targets } }" --project MyApp.xcodeproj' | jq -s '.[].targetMembership | select(.targets | length == 0)'`
 
-### Build script queries
+## Notes
 
-- Per-target scripts: `xq '.buildScripts("App")'`
-- Pipeline (enriched): `xq '.targets[] | filter(.type == .framework) | buildScripts'`
-- Filter nested with brackets:
-  - Stage: `xq '.targets[] | buildScripts | filter(.buildScripts[].stage == .pre)'`
-  - Name prefix: `xq '.targets[] | buildScripts | filter(.buildScripts[].name ~= "^Pre")'`
-- Flat list of scripts: `xq '.targets[] | buildScripts | flatten(.buildScripts)'`
-
-### Resources (Copy Bundle Resources)
-
-- Per-target resources: `xq '.resources("App")'`
-- With path mode: `xq '.resources("App", pathMode: "normalized")'`
-- Pipeline (enriched): `xq '.targets[] | resources'`
-- Filter nested with brackets:
-  - Exact filename: `xq '.targets[] | resources | filter(.resources[].path == "Info.plist")'`
-  - Regex (JSON files): `xq '.targets[] | resources | filter(.resources[].path ~= "\\.json$")'`
-- Flat list of resources: `xq '.targets[] | resources | flatten(.resources)'`
-
-## Compatibility
-
-- Direct function calls remain flat to support one-offs and scripting:
-  - `.sources("App")`, `.resources("App")`, `.buildScripts("App")`, `.dependencies("App")`
-- Pipelines starting with `.targets[]` enrich target objects by default; use bracket selectors to filter nested arrays and `flatten(...)` when you need flat results.
-
-## Regex and equality
-
-- Equality `==` is literal.
-- Regex `~=` is case-sensitive and uses `NSRegularExpression`.
-  - Example: `.resources[].path ~= "\\.json$"`
+- Path formatting is explicit via `pathMode` on fields or flat views. No global state.
+- Regex uses `NSRegularExpression` and is case‑sensitive.
+- Arrays are sorted by sensible defaults (names/paths) unless further ordering is added later.
 
 ## Releasing (maintainers)
 

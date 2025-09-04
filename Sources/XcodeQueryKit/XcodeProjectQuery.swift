@@ -14,6 +14,14 @@ public class XcodeProjectQuery {
     }
     
     public func evaluate(query: String) throws -> AnyEncodable {
+        // If query looks like GraphQL (starts with '{'), route to new executor.
+        let qtrim = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if qtrim.hasPrefix("{") {
+            let proj = try XcodeProj(pathString: projectPath)
+            let executor = GraphQLExecutor(project: proj, projectPath: projectPath)
+            let value = try GraphQL.parseAndExecute(query: query, with: executor)
+            return AnyEncodable(value)
+        }
         let proj = try XcodeProj(pathString: projectPath)
 
         // Build base targets model

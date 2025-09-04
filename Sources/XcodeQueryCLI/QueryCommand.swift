@@ -3,7 +3,7 @@ import ArgumentParser
 import XcodeQueryKit
 
 public struct QueryCommand: AsyncParsableCommand {
-    @Argument(help: "The query to execute")
+    @Argument(help: "GraphQL-style query to execute (e.g., { targets { name type } })")
     var query: String
 
     @Option(name: [.customShort("p"), .long], help: "Path to .xcodeproj (optional)")
