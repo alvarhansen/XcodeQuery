@@ -42,6 +42,99 @@ public class XcodeProjectQuery {
             return AnyEncodable(targets)
         }
 
+        // New enriched pipeline (supports multiple ops + bracket selectors + flatten)
+        if let enriched = Self.parseTargetsPipelineNew(query) {
+            // start with all targets, enriched as objects
+            var current = targets.map { EnrichedTarget(name: $0.name, type: $0.type) }
+            // initial top-level filter
+            if let pred = enriched.filterPredicate {
+                let filtered = try Self.apply(predicate: pred, to: targets)
+                let allow = Set(filtered.map { $0.name })
+                current.removeAll { !allow.contains($0.name) }
+            }
+            // apply ops in sequence, enriching
+            for op in enriched.ops {
+                switch op.kind {
+                case .sources:
+                    for i in current.indices {
+                        if let nt = proj.pbxproj.nativeTargets.first(where: { $0.name == current[i].name }) {
+                            current[i].sources = Self.sourceFiles(for: nt, mode: op.pathMode ?? .fileRef, projectPath: projectPath)
+                        }
+                    }
+                case .resources:
+                    for i in current.indices {
+                        if let nt = proj.pbxproj.nativeTargets.first(where: { $0.name == current[i].name }) {
+                            current[i].resources = Self.resourceFiles(for: nt, mode: op.pathMode ?? .fileRef, projectPath: projectPath)
+                        }
+                    }
+                case .buildScripts:
+                    for i in current.indices {
+                        if let nt = proj.pbxproj.nativeTargets.first(where: { $0.name == current[i].name }) {
+                            current[i].buildScripts = Self.collectBuildScripts(for: nt)
+                        }
+                    }
+                case .dependencies:
+                    let graph = DependencyGraph(project: proj)
+                    for i in current.indices {
+                        let name = current[i].name
+                        let resolved = (try? graph.dependencies(of: name, recursive: op.recursive)) ?? []
+                        current[i].dependencies = resolved.map { Target(name: $0.name, type: TargetType.from(productType: $0.productType)) }
+                    }
+                case .dependents:
+                    let graph = DependencyGraph(project: proj)
+                    for i in current.indices {
+                        let name = current[i].name
+                        let resolved = (try? graph.dependents(of: name, recursive: op.recursive)) ?? []
+                        current[i].dependencies = resolved.map { Target(name: $0.name, type: TargetType.from(productType: $0.productType)) }
+                    }
+                case .targetMembership:
+                    // special: returns flat owners
+                    let index = FileIndex(project: proj, projectPath: projectPath)
+                    var uniq: [String: Set<String>] = [:]
+                    for t in current {
+                        if let nt = proj.pbxproj.nativeTargets.first(where: { $0.name == t.name }) {
+                            for s in Self.sourceFiles(for: nt, mode: op.pathMode ?? .fileRef, projectPath: projectPath) {
+                                uniq[s, default: []].formUnion(index.owners(forPath: s, mode: op.pathMode ?? .fileRef))
+                            }
+                        }
+                    }
+                    let out = uniq.map { OwnerEntry(path: $0.key, targets: Array($0.value).sorted()) }
+                    return AnyEncodable(out.sorted { $0.path < $1.path })
+                // flatten handled after post-filter via enriched.flattenFacet
+                }
+            }
+            // post-filter using bracket selectors
+            if let pf = enriched.postFilter {
+                let hasNested = pf.contains(".sources[]") || pf.contains(".resources[]") || pf.contains(".dependencies[]") || pf.contains(".buildScripts[]")
+                if hasNested || !enriched.ops.isEmpty {
+                    current = try Self.applyEnrichedPredicate(pf, to: current, keepEmpty: false)
+                }
+            }
+            // flatten if requested
+            if let facet = enriched.flattenFacet {
+                switch facet {
+                case .sources:
+                    var out: [SourceEntry] = []
+                    for t in current { for p in t.sources ?? [] { out.append(SourceEntry(target: t.name, path: p)) } }
+                    return AnyEncodable(out)
+                case .resources:
+                    var out: [ResourceEntry] = []
+                    for t in current { for p in t.resources ?? [] { out.append(ResourceEntry(target: t.name, path: p)) } }
+                    return AnyEncodable(out)
+                case .dependencies:
+                    var out: [Target] = []
+                    for t in current { out.append(contentsOf: t.dependencies ?? []) }
+                    return AnyEncodable(out)
+                case .buildScripts:
+                    var out: [BuildScriptEntry] = []
+                    for t in current { out.append(contentsOf: t.buildScripts ?? []) }
+                    return AnyEncodable(out)
+                }
+            }
+            return AnyEncodable(current)
+        }
+
+        // Legacy pipeline
         if let pipeline = Self.parseTargetsPipeline(query) {
             // start with all targets
             var current = targets
@@ -188,7 +281,7 @@ public class XcodeProjectQuery {
     }
 }
 
-struct Target: Codable {
+struct Target: Codable, Equatable {
     var name: String
     var type: TargetType
 }
@@ -273,6 +366,70 @@ public struct AnyEncodable: Encodable {
 // MARK: - Simple query parsing
 
 extension XcodeProjectQuery {
+    // New enriched-pipeline description
+    struct ParsedPipeline {
+        var filterPredicate: String?
+        var ops: [PipelineOp]
+        var postFilter: String?
+        var flattenFacet: FlattenFacet?
+    }
+
+    enum FlattenFacet { case sources, resources, dependencies, buildScripts }
+
+    // Parse .targets[] pipelines with multiple ops, optional post-filter and optional flatten(.facet)
+    fileprivate static func parseTargetsPipelineNew(_ query: String) -> ParsedPipeline? {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix(".targets[]") else { return nil }
+        let remainder = trimmed.dropFirst(".targets[]".count)
+        let tokens = remainder.split(separator: "|", omittingEmptySubsequences: true).map { $0.trimmingCharacters(in: .whitespaces) }
+        var filterPred: String?
+        var postFilter: String?
+        var ops: [PipelineOp] = []
+        var lastSourcesMode: PathMode?
+        var flattenFacet: FlattenFacet?
+        if tokens.isEmpty { return ParsedPipeline(filterPredicate: nil, ops: [], postFilter: nil, flattenFacet: nil) }
+        for tok in tokens {
+            if tok.hasPrefix("filter("), tok.hasSuffix(")") {
+                let inner = String(tok.dropFirst("filter(".count).dropLast()).trimmingCharacters(in: .whitespaces)
+                if filterPred == nil && ops.isEmpty {
+                    // treat first filter immediately after .targets[] as pre-target filter
+                    filterPred = inner
+                }
+                postFilter = inner
+            } else if tok.hasPrefix("dependencies") {
+                let recursive = parseOptionalRecursive(tok)
+                ops.append(PipelineOp(kind: .dependencies, recursive: recursive))
+            } else if tok.hasPrefix("dependents") || tok.hasPrefix("reverseDependencies") || tok.hasPrefix("rdeps") {
+                let recursive = parseOptionalRecursive(tok)
+                ops.append(PipelineOp(kind: .dependents, recursive: recursive))
+            } else if tok == "sources" || tok.hasPrefix("sources(") {
+                let mode = parseSourcesMode(tok)
+                lastSourcesMode = mode ?? lastSourcesMode
+                ops.append(PipelineOp(kind: .sources, recursive: false, pathMode: lastSourcesMode))
+            } else if tok == "targetMembership" || tok.hasPrefix("targetMembership(") {
+                let mode = parseSourcesMode(tok)
+                ops.append(PipelineOp(kind: .targetMembership, recursive: false, pathMode: mode ?? lastSourcesMode))
+            } else if tok == "buildScripts" {
+                ops.append(PipelineOp(kind: .buildScripts))
+            } else if tok == "resources" || tok.hasPrefix("resources(") {
+                let mode = parseSourcesMode(tok)
+                ops.append(PipelineOp(kind: .resources, recursive: false, pathMode: mode ?? lastSourcesMode))
+            } else if tok.hasPrefix("flatten(") && tok.hasSuffix(")") {
+                let inner = tok.dropFirst("flatten(".count).dropLast().trimmingCharacters(in: .whitespaces)
+                switch inner {
+                case ".sources": flattenFacet = .sources
+                case ".resources": flattenFacet = .resources
+                case ".dependencies": flattenFacet = .dependencies
+                case ".buildScripts": flattenFacet = .buildScripts
+                default: return nil
+                }
+            } else if tok.isEmpty { continue } else {
+                return nil
+            }
+        }
+        return ParsedPipeline(filterPredicate: filterPred, ops: ops, postFilter: postFilter, flattenFacet: flattenFacet)
+    }
+
     struct PipelineOp {
         enum Kind { case dependencies, dependents, sources, targetMembership, buildScripts, resources }
         let kind: Kind
@@ -895,6 +1052,220 @@ extension XcodeProjectQuery {
         }
         return expr
     }
+
+    // Bracket-selector evaluation on enriched targets
+    fileprivate static func applyEnrichedPredicate(_ predicate: String, to targets: [EnrichedTarget], keepEmpty: Bool) throws -> [EnrichedTarget] {
+        enum Op { case and, or }
+        struct TermResult {
+            var truth: Bool
+            var src: [String]?
+            var res: [String]?
+            var deps: [Target]?
+            var scripts: [BuildScriptEntry]?
+        }
+
+        func evalTerm(_ t: String, on et: EnrichedTarget) throws -> TermResult {
+            let s = t.trimmingCharacters(in: .whitespaces)
+            // top-level fields
+            if s.hasPrefix(".name == ") {
+                let rest = s.dropFirst(".name == ".count).trimmingCharacters(in: .whitespaces)
+                if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                    let val = String(rest.dropFirst().dropLast())
+                    return TermResult(truth: et.name == val, src: nil, res: nil, deps: nil, scripts: nil)
+                }
+            }
+            if s.hasPrefix(".name ~= ") {
+                let rest = s.dropFirst(".name ~= ".count).trimmingCharacters(in: .whitespaces)
+                if rest.hasPrefix("\"") && rest.hasSuffix("\"") && rest.count >= 2 {
+                    let pattern = String(rest.dropFirst().dropLast())
+                    return TermResult(truth: regexMatch(et.name, pattern), src: nil, res: nil, deps: nil, scripts: nil)
+                }
+            }
+            if s.hasPrefix(".type == .") {
+                let val = s.replacingOccurrences(of: ".type == .", with: "")
+                if let t = TargetType(shortName: val) {
+                    return TermResult(truth: et.type == t, src: nil, res: nil, deps: nil, scripts: nil)
+                }
+            }
+
+            // sources
+            if s.hasPrefix(".sources[].path == ") {
+                let rest = s.dropFirst(".sources[].path == ".count).trimmingCharacters(in: .whitespaces)
+                if rest.hasPrefix("\"") && rest.hasSuffix("\"") {
+                    let val = String(rest.dropFirst().dropLast())
+                    let matches = (et.sources ?? []).filter { $0 == val }
+                    return TermResult(truth: !matches.isEmpty, src: matches, res: nil, deps: nil, scripts: nil)
+                }
+            }
+            if s.hasPrefix(".sources[].path ~= ") {
+                let rest = s.dropFirst(".sources[].path ~= ".count).trimmingCharacters(in: .whitespaces)
+                if rest.hasPrefix("\"") && rest.hasSuffix("\"") {
+                    let pattern = String(rest.dropFirst().dropLast())
+                    let matches = (et.sources ?? []).filter { regexMatch($0, pattern) }
+                    return TermResult(truth: !matches.isEmpty, src: matches, res: nil, deps: nil, scripts: nil)
+                }
+            }
+
+            // resources
+            if s.hasPrefix(".resources[].path == ") {
+                let rest = s.dropFirst(".resources[].path == ".count).trimmingCharacters(in: .whitespaces)
+                if rest.hasPrefix("\"") && rest.hasSuffix("\"") {
+                    let val = String(rest.dropFirst().dropLast())
+                    let matches = (et.resources ?? []).filter { $0 == val }
+                    return TermResult(truth: !matches.isEmpty, src: nil, res: matches, deps: nil, scripts: nil)
+                }
+            }
+            if s.hasPrefix(".resources[].path ~= ") {
+                let rest = s.dropFirst(".resources[].path ~= ".count).trimmingCharacters(in: .whitespaces)
+                if rest.hasPrefix("\"") && rest.hasSuffix("\"") {
+                    let pattern = String(rest.dropFirst().dropLast())
+                    let matches = (et.resources ?? []).filter { regexMatch($0, pattern) }
+                    return TermResult(truth: !matches.isEmpty, src: nil, res: matches, deps: nil, scripts: nil)
+                }
+            }
+
+            // dependencies
+            if s.hasPrefix(".dependencies[].name == ") {
+                let rest = s.dropFirst(".dependencies[].name == ".count).trimmingCharacters(in: .whitespaces)
+                if rest.hasPrefix("\"") && rest.hasSuffix("\"") {
+                    let val = String(rest.dropFirst().dropLast())
+                    let matches = (et.dependencies ?? []).filter { $0.name == val }
+                    return TermResult(truth: !matches.isEmpty, src: nil, res: nil, deps: matches, scripts: nil)
+                }
+            }
+            if s.hasPrefix(".dependencies[].name ~= ") {
+                let rest = s.dropFirst(".dependencies[].name ~= ".count).trimmingCharacters(in: .whitespaces)
+                if rest.hasPrefix("\"") && rest.hasSuffix("\"") {
+                    let pattern = String(rest.dropFirst().dropLast())
+                    let matches = (et.dependencies ?? []).filter { regexMatch($0.name, pattern) }
+                    return TermResult(truth: !matches.isEmpty, src: nil, res: nil, deps: matches, scripts: nil)
+                }
+            }
+            if s.hasPrefix(".dependencies[].type == .") {
+                let val = s.replacingOccurrences(of: ".dependencies[].type == .", with: "")
+                if let tt = TargetType(shortName: val) {
+                    let matches = (et.dependencies ?? []).filter { $0.type == tt }
+                    return TermResult(truth: !matches.isEmpty, src: nil, res: nil, deps: matches, scripts: nil)
+                }
+            }
+
+            // build scripts
+            if s.hasPrefix(".buildScripts[].stage == .") {
+                let val = s.replacingOccurrences(of: ".buildScripts[].stage == .", with: "")
+                let st: BuildScriptEntry.Stage? = (val == "pre" ? .pre : (val == "post" ? .post : nil))
+                if let st {
+                    let matches = (et.buildScripts ?? []).filter { $0.stage == st }
+                    return TermResult(truth: !matches.isEmpty, src: nil, res: nil, deps: nil, scripts: matches)
+                }
+            }
+            if s.hasPrefix(".buildScripts[].name == ") {
+                let rest = s.dropFirst(".buildScripts[].name == ".count).trimmingCharacters(in: .whitespaces)
+                if rest.hasPrefix("\"") && rest.hasSuffix("\"") {
+                    let val = String(rest.dropFirst().dropLast())
+                    let matches = (et.buildScripts ?? []).filter { ($0.name ?? "") == val }
+                    return TermResult(truth: !matches.isEmpty, src: nil, res: nil, deps: nil, scripts: matches)
+                }
+            }
+            if s.hasPrefix(".buildScripts[].name ~= ") {
+                let rest = s.dropFirst(".buildScripts[].name ~= ".count).trimmingCharacters(in: .whitespaces)
+                if rest.hasPrefix("\"") && rest.hasSuffix("\"") {
+                    let pattern = String(rest.dropFirst().dropLast())
+                    let matches = (et.buildScripts ?? []).filter { regexMatch($0.name ?? "", pattern) }
+                    return TermResult(truth: !matches.isEmpty, src: nil, res: nil, deps: nil, scripts: matches)
+                }
+            }
+
+            throw Error.invalidQuery(predicate)
+        }
+
+        func splitExpression(_ expr: String) -> ([String], [Op]) {
+            var terms: [String] = []
+            var ops: [Op] = []
+            var buf = ""
+            let chars = Array(expr)
+            var i = 0
+            while i < chars.count {
+                if i + 1 < chars.count {
+                    let two = String(chars[i...i+1])
+                    if two == "&&" { terms.append(buf.trimmingCharacters(in: .whitespaces)); buf = ""; ops.append(.and); i += 2; continue }
+                    if two == "||" { terms.append(buf.trimmingCharacters(in: .whitespaces)); buf = ""; ops.append(.or); i += 2; continue }
+                }
+                buf.append(chars[i]); i += 1
+            }
+            if !buf.isEmpty { terms.append(buf.trimmingCharacters(in: .whitespaces)) }
+            return (terms, ops)
+        }
+
+        func combine<T: Equatable>(_ a: [T]?, _ b: [T]?, intersect: Bool) -> [T]? {
+            switch (a, b) {
+            case (nil, nil): return nil
+            case (let x?, nil): return x
+            case (nil, let y?): return y
+            case (let x?, let y?):
+                if intersect { return x.filter { y.contains($0) } }
+                var out = x
+                for e in y where !out.contains(e) { out.append(e) }
+                return out
+            }
+        }
+
+        func combineResults(_ lhs: TermResult, _ rhs: TermResult, op: Op) -> TermResult {
+            switch op {
+            case .and:
+                return TermResult(truth: lhs.truth && rhs.truth,
+                                  src: combine(lhs.src, rhs.src, intersect: true),
+                                  res: combine(lhs.res, rhs.res, intersect: true),
+                                  deps: combine(lhs.deps, rhs.deps, intersect: true),
+                                  scripts: combine(lhs.scripts, rhs.scripts, intersect: true))
+            case .or:
+                return TermResult(truth: lhs.truth || rhs.truth,
+                                  src: combine(lhs.src, rhs.src, intersect: false),
+                                  res: combine(lhs.res, rhs.res, intersect: false),
+                                  deps: combine(lhs.deps, rhs.deps, intersect: false),
+                                  scripts: combine(lhs.scripts, rhs.scripts, intersect: false))
+            }
+        }
+
+        var result: [EnrichedTarget] = []
+        for var et in targets {
+            let (terms, ops) = splitExpression(predicate)
+            guard let first = terms.first else { continue }
+            var acc = try evalTerm(first, on: et)
+            var idx = 0
+            while idx < ops.count {
+                let next = try evalTerm(terms[idx + 1], on: et)
+                acc = combineResults(acc, next, op: ops[idx])
+                idx += 1
+            }
+            if acc.truth {
+                if let s = acc.src { et.sources = s } else if !keepEmpty, predicate.contains(".sources[]") { et.sources = [] }
+                if let r = acc.res { et.resources = r } else if !keepEmpty, predicate.contains(".resources[]") { et.resources = [] }
+                if let d = acc.deps { et.dependencies = d } else if !keepEmpty, predicate.contains(".dependencies[]") { et.dependencies = [] }
+                if let b = acc.scripts { et.buildScripts = b } else if !keepEmpty, predicate.contains(".buildScripts[]") { et.buildScripts = [] }
+
+                if !keepEmpty {
+                    var drop = false
+                    if predicate.contains(".sources[]") && (et.sources?.isEmpty ?? true) { drop = true }
+                    if predicate.contains(".resources[]") && (et.resources?.isEmpty ?? true) { drop = true }
+                    if predicate.contains(".dependencies[]") && (et.dependencies?.isEmpty ?? true) { drop = true }
+                    if predicate.contains(".buildScripts[]") && (et.buildScripts?.isEmpty ?? true) { drop = true }
+                    if drop { continue }
+                }
+                result.append(et)
+            }
+        }
+        return result
+    }
+}
+
+// Enriched target representation
+private struct EnrichedTarget: Codable {
+    var name: String
+    var type: TargetType
+    var sources: [String]? = nil
+    var resources: [String]? = nil
+    var dependencies: [Target]? = nil
+    var buildScripts: [BuildScriptEntry]? = nil
 }
 
 // MARK: - Dependency graph utilities
