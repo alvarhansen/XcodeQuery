@@ -13,32 +13,6 @@
 
 After install, verify: `xq --help`
 
-## Releasing (maintainers)
-
-1) Create a version tag, e.g. `v0.1.0` and push it:
-   - `git tag v0.1.0 && git push origin v0.1.0`
-
-2) GitHub Actions will:
-   - Build a release binary for macOS
-   - Create a GitHub Release and upload `xq-v0.1.0-macos.zip`
-
-3) Update Homebrew formula for stable installs:
-   - Edit `HomebrewFormula/xq.rb`:
-     - Set `url "https://github.com/alvarhansen/XcodeQuery/archive/refs/tags/v0.1.0.tar.gz"`
-     - Set `sha256` for that tarball (example to compute):
-       - `curl -L https://github.com/alvarhansen/XcodeQuery/archive/refs/tags/v0.1.0.tar.gz | shasum -a 256`
-   - Commit and push the formula change on main.
-
-4) Users can then install stable via:
-   - `brew install https://raw.githubusercontent.com/alvarhansen/XcodeQuery/main/HomebrewFormula/xq.rb`
-
-## Homebrew Tap
-
-Once the `alvarhansen/homebrew-xcodequery` tap has the generated formula, users can install via:
-
-- `brew tap alvarhansen/xcodequery`
-- `brew install xq`
-
 ## Query Language
 
 - Targets list:
@@ -140,3 +114,29 @@ Notes
 - Equality `==` is literal.
 - Regex `~=` is case-sensitive and uses `NSRegularExpression`.
   - Example: `.resources[].path ~= "\\.json$"`
+
+## Releasing (maintainers)
+
+1) Create a version tag, e.g. `v0.1.0` and push it:
+   - `git tag v0.1.0 && git push origin v0.1.0`
+
+2) GitHub Actions will:
+   - Build a release binary for macOS
+   - Create a GitHub Release and upload `xq-v0.1.0-macos.zip`
+
+3) Update Homebrew formula for stable installs:
+   - Edit `HomebrewFormula/xq.rb`:
+     - Set `url "https://github.com/alvarhansen/XcodeQuery/archive/refs/tags/v0.1.0.tar.gz"`
+     - Set `sha256` for that tarball (example to compute):
+       - `curl -L https://github.com/alvarhansen/XcodeQuery/archive/refs/tags/v0.1.0.tar.gz | shasum -a 256`
+   - Commit and push the formula change on main.
+
+4) Users can then install stable via:
+   - `brew install https://raw.githubusercontent.com/alvarhansen/XcodeQuery/main/HomebrewFormula/xq.rb`
+
+## Homebrew Tap
+
+Once the `alvarhansen/homebrew-xcodequery` tap has the generated formula, users can install via:
+
+- `brew tap alvarhansen/xcodequery`
+- `brew install xq`
