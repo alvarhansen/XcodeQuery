@@ -4,7 +4,7 @@ import XcodeQueryCLI
 @main
 struct XcodeQueryMainCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        subcommands: [QueryCommand.self],
+        subcommands: [QueryCommand.self, SchemaCommand.self],
         defaultSubcommand: QueryCommand.self
     )
 }
