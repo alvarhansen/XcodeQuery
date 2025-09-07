@@ -38,6 +38,7 @@ let package = Package(
             name: "XcodeQueryKitTests",
             dependencies: [
                 .target(name: "XcodeQueryKit"),
+                .target(name: "XcodeQueryCLI"),
                 .product(name: "XcodeGenKit", package: "XcodeGen"),
                 .product(name: "ProjectSpec", package: "XcodeGen"),
             ]
