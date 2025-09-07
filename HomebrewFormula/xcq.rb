@@ -1,4 +1,4 @@
-class Xq < Formula
+class Xcq < Formula
   desc "Query and introspect Xcode projects from the CLI"
   homepage "https://github.com/alvarhansen/XcodeQuery"
   license "MIT"
@@ -14,10 +14,10 @@ class Xq < Formula
 
   def install
     system "swift", "build", "-c", "release"
-    bin.install ".build/release/xq"
+    bin.install ".build/release/xcq"
   end
 
   test do
-    system bin/"xq", "--help"
-  end
+    system bin/"xcq", "--help"
+end
 end

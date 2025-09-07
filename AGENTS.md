@@ -13,7 +13,7 @@
 - Build (debug): `make build` or `swift build -c debug`
 - Tests (debug): `make test` or `swift test -c debug`
 - Build (release): `make release` or `swift build -c release`
-- Find built binary: `make xq-bin` (prints path) or `.build/debug/xq`
+- Find built binary: `make xcq-bin` (prints path) or `.build/debug/xcq`
 - Local Homebrew install: `make brew-local`
 
 ## Coding Style & Naming Conventions

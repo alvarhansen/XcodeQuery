@@ -6,7 +6,7 @@ let package = Package(
     name: "XcodeQuery",
     platforms: [.macOS(.v15)],
     products: [
-        .executable(name: "xq", targets: ["XcodeQuery"]),
+        .executable(name: "xcq", targets: ["XcodeQuery"]),
     ],
     dependencies: [
         .package(url: "https://github.com/tuist/XcodeProj.git", exact: "8.27.7"),

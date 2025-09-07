@@ -36,8 +36,8 @@ jobs:
         working-directory: tap
         run: |
           mkdir -p Formula
-          cat > Formula/xq.rb <<'RUBY'
-class Xq < Formula
+          cat > Formula/xcq.rb <<'RUBY'
+class Xcq < Formula
   desc "Query and introspect Xcode projects from the CLI"
   homepage "https://github.com/alvarhansen/XcodeQuery"
   license "MIT"
@@ -51,18 +51,18 @@ class Xq < Formula
 
   def install
     system "swift", "build", "-c", "release"
-    bin.install ".build/release/xq"
+    bin.install ".build/release/xcq"
   end
 
   test do
-    system bin/"xq", "--help"
+    system bin/"xcq", "--help"
   end
 end
 RUBY
-          sed -i '' "s|__URL__|${{ steps.prep.outputs.tar_url }}|g" Formula/xq.rb
-          sed -i '' "s|__SHA__|${{ steps.sha.outputs.sha }}|g" Formula/xq.rb
-          git add Formula/xq.rb
+          sed -i '' "s|__URL__|${{ steps.prep.outputs.tar_url }}|g" Formula/xcq.rb
+          sed -i '' "s|__SHA__|${{ steps.sha.outputs.sha }}|g" Formula/xcq.rb
+          git add Formula/xcq.rb
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Update xq to ${{ steps.prep.outputs.tag }}" || echo "No changes to commit"
+          git commit -m "Update xcq to ${{ steps.prep.outputs.tag }}" || echo "No changes to commit"
           git push

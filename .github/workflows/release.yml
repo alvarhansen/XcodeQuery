@@ -18,9 +18,9 @@ jobs:
       - name: Package artifact
         run: |
           mkdir -p dist
-          cp .build/release/xq dist/
+          cp .build/release/xcq dist/
           cd dist
-          zip -r xq-${{ github.ref_name }}-macos.zip xq
+          zip -r xcq-${{ github.ref_name }}-macos.zip xcq
 
       - name: Create GitHub Release
         id: create_release
@@ -39,7 +39,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist/xq-${{ github.ref_name }}-macos.zip
-          asset_name: xq-${{ github.ref_name }}-macos.zip
+          asset_path: dist/xcq-${{ github.ref_name }}-macos.zip
+          asset_name: xcq-${{ github.ref_name }}-macos.zip
           asset_content_type: application/zip
-
