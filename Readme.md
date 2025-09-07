@@ -1,6 +1,6 @@
 # Xcode Query
 
-Xcode Query (xcq) now uses a GraphQL-style query language for predictable, composable queries against your Xcode project. Results are JSON and shaped by your selection set.
+Xcode Query (xcq) uses a GraphQL-style query language for predictable, composable queries against your Xcode project. Results are JSON and shaped by your selection set.
 
 ## Install via Homebrew
 
