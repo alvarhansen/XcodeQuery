@@ -19,7 +19,9 @@ public struct QueryCommand: AsyncParsableCommand {
         let xc = XcodeProjectQuery(projectPath: try resolveProjectPath())
         let result = try xc.evaluate(query: query)
         
-        let json = try JSONEncoder().encode(result)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted]
+        let json = try encoder.encode(result)
         print(String(data: json, encoding: .utf8) ?? "")
     }
 
