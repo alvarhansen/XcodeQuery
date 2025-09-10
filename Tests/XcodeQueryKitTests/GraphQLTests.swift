@@ -34,7 +34,7 @@ final class GraphQLTests: XCTestCase {
 
         // targets
         do {
-            let any = try qp.evaluate(query: "{ targets { name type } }")
+            let any = try qp.evaluate(query: "targets { name type }")
             let data = try JSONEncoder().encode(any)
             struct Root: Decodable { struct T: Decodable { let name: String; let type: String }; let targets: [T] }
             let obj = try JSONDecoder().decode(Root.self, from: data)
@@ -44,7 +44,7 @@ final class GraphQLTests: XCTestCase {
 
         // dependencies(App) -> Lib
         do {
-            let any = try qp.evaluate(query: "{ dependencies(name: \"App\") { name } }")
+            let any = try qp.evaluate(query: "dependencies(name: \"App\") { name }")
             let data = try JSONEncoder().encode(any)
             struct Root: Decodable { struct D: Decodable { let name: String }; let dependencies: [D] }
             let out = try JSONDecoder().decode(Root.self, from: data)
@@ -53,7 +53,7 @@ final class GraphQLTests: XCTestCase {
 
         // targetSources normalized contain files
         do {
-            let any = try qp.evaluate(query: "{ targetSources(pathMode: NORMALIZED) { target path } }")
+            let any = try qp.evaluate(query: "targetSources(pathMode: NORMALIZED) { target path }")
             let data = try JSONEncoder().encode(any)
             struct Root: Decodable { struct Row: Decodable { let target: String; let path: String }; let targetSources: [Row] }
             let out = try JSONDecoder().decode(Root.self, from: data)
@@ -63,7 +63,7 @@ final class GraphQLTests: XCTestCase {
 
         // membership for Shared.swift has two owners
         do {
-            let any = try qp.evaluate(query: "{ targetMembership(path: \"Shared/Shared.swift\", pathMode: NORMALIZED) { path targets } }")
+            let any = try qp.evaluate(query: "targetMembership(path: \"Shared/Shared.swift\", pathMode: NORMALIZED) { path targets }")
             let data = try JSONEncoder().encode(any)
             struct Root: Decodable { struct M: Decodable { let path: String; let targets: [String] }; let targetMembership: M }
             let out = try JSONDecoder().decode(Root.self, from: data)
@@ -82,4 +82,3 @@ private enum Temporary {
         return TempDir(url: url)
     }
 }
-

@@ -35,7 +35,7 @@ final class GraphQLQueryTests: XCTestCase {
         // 1) Targets list
         struct TargetsOut: Decodable { let targets: [T] }
         struct T: Decodable { let name: String; let type: String }
-        let anyTargets = try qp.evaluate(query: "{ targets { name type } }")
+        let anyTargets = try qp.evaluate(query: "targets { name type }")
         let targetData = try JSONEncoder().encode(anyTargets)
         let targets = try JSONDecoder().decode(TargetsOut.self, from: targetData).targets
         XCTAssertTrue(Set(targets.map { $0.name }).isSuperset(of: ["App", "AppTests", "Lib"]))
@@ -43,7 +43,7 @@ final class GraphQLQueryTests: XCTestCase {
         // 2) Basic flat view (targetSources)
         struct Row: Decodable { let target: String; let path: String }
         struct Flat: Decodable { let targetSources: [Row] }
-        let anyFlat = try qp.evaluate(query: "{ targetSources(pathMode: NORMALIZED) { target path } }")
+        let anyFlat = try qp.evaluate(query: "targetSources(pathMode: NORMALIZED) { target path }")
         let flat = try JSONDecoder().decode(Flat.self, from: JSONEncoder().encode(anyFlat)).targetSources
         XCTAssertTrue(flat.contains(where: { $0.target == "Lib" && $0.path.contains("Lib/Sources/LibFile.swift") }))
 
@@ -51,7 +51,7 @@ final class GraphQLQueryTests: XCTestCase {
         struct D: Decodable { let name: String }
         struct WithDeps: Decodable { let name: String; let dependencies: [D] }
         struct NestedOut: Decodable { let targets: [WithDeps] }
-        let anyNested = try qp.evaluate(query: "{ targets(type: UNIT_TEST) { name dependencies(recursive: true) { name } } }")
+        let anyNested = try qp.evaluate(query: "targets(type: UNIT_TEST) { name dependencies(recursive: true) { name } }")
         let nested = try JSONDecoder().decode(NestedOut.self, from: JSONEncoder().encode(anyNested))
         let depsFlat = Set(nested.targets.flatMap { $0.dependencies.map { $0.name } })
         XCTAssertEqual(depsFlat, ["App", "Lib"])
@@ -60,7 +60,7 @@ final class GraphQLQueryTests: XCTestCase {
         struct Src: Decodable { let path: String }
         struct TS: Decodable { let name: String; let sources: [Src] }
         struct SOut: Decodable { let targets: [TS] }
-        let anySrc = try qp.evaluate(query: #"{ targets(type: FRAMEWORK) { name sources(pathMode: NORMALIZED, filter: { path: { regex: "\.swift$" } }) { path } } }"#)
+        let anySrc = try qp.evaluate(query: #"targets(type: FRAMEWORK) { name sources(pathMode: NORMALIZED, filter: { path: { regex: "\.swift$" } }) { path } }"#)
         let src = try JSONDecoder().decode(SOut.self, from: JSONEncoder().encode(anySrc))
         XCTAssertTrue(src.targets.flatMap { $0.sources }.contains { $0.path.contains("LibFile.swift") })
     }

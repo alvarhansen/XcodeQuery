@@ -100,10 +100,18 @@ final class GQLParser {
 
     func parseDocument() throws -> GQLSelectionSet {
         skipWS()
-        let sel = try parseSelectionSet()
-        skipWS()
-        if !isAtEnd { throw GQLError.parse("Unexpected trailing content at position \(i)") }
-        return sel
+        if peek("{") {
+            throw GQLError.parse("Top-level braces are not supported; omit them")
+        }
+        var fields: [GQLField] = []
+        while !isAtEnd {
+            let f = try parseField()
+            fields.append(f)
+            skipWS()
+            _ = consumeIf(",")
+            skipWS()
+        }
+        return GQLSelectionSet(fields: fields)
     }
 
     private func parseSelectionSet() throws -> GQLSelectionSet {

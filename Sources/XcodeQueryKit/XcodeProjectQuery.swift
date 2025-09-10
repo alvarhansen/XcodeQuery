@@ -13,10 +13,12 @@ public class XcodeProjectQuery {
     // GraphQL-only entrypoint
     public func evaluate(query: String) throws -> AnyEncodable {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("{") else { throw Error.invalidQuery("Invalid query syntax. Start with '{ ... }'.") }
+        guard !trimmed.hasPrefix("{") else {
+            throw Error.invalidQuery("Top-level braces are not supported. Write selection only, e.g., targets { name type }")
+        }
         let proj = try XcodeProj(pathString: projectPath)
         let executor = GraphQLExecutor(project: proj, projectPath: projectPath)
-        let value = try GraphQL.parseAndExecute(query: query, with: executor)
+        let value = try GraphQL.parseAndExecute(query: trimmed, with: executor)
         return AnyEncodable(value)
     }
 }

@@ -15,8 +15,8 @@ After install, verify: `xcq --help`
 
 ## Usage
 
-- Run against the project in the current directory: `xcq '{ targets { name type } }'`
-- Or specify a project: `xcq '{ targets { name } }' --project MyApp.xcodeproj`
+- Run against the project in the current directory: `xcq 'targets { name type }'`
+- Or specify a project: `xcq 'targets { name }' --project MyApp.xcodeproj`
 
 ## Schema Overview
 
@@ -49,50 +49,50 @@ Types and inputs:
 ## Examples
 
 - List targets and types:
-  - `xcq '{ targets { name type } }'`
+  - `xcq 'targets { name type }'`
 
 - Unit test targets only:
-  - `xcq '{ targets(type: UNIT_TEST) { name } }'`
+  - `xcq 'targets(type: UNIT_TEST) { name }'`
 
 - Targets with name ending in "Tests":
-  - `xcq '{ targets(filter: { name: { suffix: "Tests" } }) { name } }'`
+  - `xcq 'targets(filter: { name: { suffix: "Tests" } }) { name }'`
 
 - Dependencies of a target:
-  - Direct: `xcq '{ dependencies(name: "App") { name type } }'`
-  - Transitive: `xcq '{ dependencies(name: "App", recursive: true) { name } }'`
-  - Reverse (who depends on): `xcq '{ dependents(name: "Lib") { name } }'`
+  - Direct: `xcq 'dependencies(name: "App") { name type }'`
+  - Transitive: `xcq 'dependencies(name: "App", recursive: true) { name }'`
+  - Reverse (who depends on): `xcq 'dependents(name: "Lib") { name }'`
 
 - Per-target dependencies (nested):
-  - `xcq '{ targets(type: UNIT_TEST) { name dependencies(recursive: true) { name } } }'`
+  - `xcq 'targets(type: UNIT_TEST) { name dependencies(recursive: true) { name } }'`
 
 - Sources
   - Nested, normalized Swift only:
-    - `xcq '{ targets(type: FRAMEWORK) { name sources(pathMode: NORMALIZED, filter: { path: { regex: "\\.swift$" }}) { path } } }'`
+    - `xcq 'targets(type: FRAMEWORK) { name sources(pathMode: NORMALIZED, filter: { path: { regex: "\\.swift$" }}) { path } }'`
   - Flat, normalized (easy to pipe):
-    - `xcq '{ targetSources(pathMode: NORMALIZED) { target path } }'`
+    - `xcq 'targetSources(pathMode: NORMALIZED) { target path }'`
 
 - Resources (Copy Bundle Resources)
   - Per-target JSON resources:
-    - `xcq '{ targets { name resources(filter: { path: { regex: "\\.json$" }}) { path } } }'`
+    - `xcq 'targets { name resources(filter: { path: { regex: "\\.json$" }}) { path } }'`
   - Flat list, exact filename:
-    - `xcq '{ targetResources { target path } }' | jq '.targetResources | map(select(.path == "Info.plist"))'`
+    - `xcq 'targetResources { target path }' | jq '.targetResources | map(select(.path == "Info.plist"))'`
 
 - Build scripts
   - Nested for frameworks, pre stage:
-    - `xcq '{ targets(type: FRAMEWORK) { name buildScripts(filter: { stage: PRE }) { name stage inputPaths } } }'`
+    - `xcq 'targets(type: FRAMEWORK) { name buildScripts(filter: { stage: PRE }) { name stage inputPaths } }'`
   - Flat with stage filter:
-    - `xcq '{ targetBuildScripts(filter: { stage: PRE }) { target name stage } }'`
+    - `xcq 'targetBuildScripts(filter: { stage: PRE }) { target name stage }'`
 
 - Target membership for a file
-  - `xcq '{ targetMembership(path: "Shared/Shared.swift", pathMode: NORMALIZED) { path targets } }'`
+  - `xcq 'targetMembership(path: "Shared/Shared.swift", pathMode: NORMALIZED) { path targets }'`
 
 ## jq Recipes
 
 - Files used by multiple targets (normalized):
-  - `xcq '{ targetSources(pathMode: NORMALIZED) { target path } }' --project MyApp.xcodeproj | jq '.targetSources | group_by(.path) | map(select(length > 1) | { path: .[0].path, targets: map(.target) })'`
+  - `xcq 'targetSources(pathMode: NORMALIZED) { target path }' --project MyApp.xcodeproj | jq '.targetSources | group_by(.path) | map(select(length > 1) | { path: .[0].path, targets: map(.target) })'`
 
 - Files not in any target (absolute):
-  - `find "$(pwd)" \( -name "*.swift" -o -name "*.m" -o -name "*.mm" -o -name "*.c" -o -name "*.cc" -o -name "*.cpp" \) -not -path "$(pwd)/.build/*" -not -path "$(pwd)/**/*.xcodeproj/*" -print0 | xargs -0 -n1 -I{} sh -c 'xcq "{ targetMembership(path: \"{}\", pathMode: ABSOLUTE) { path targets } }" --project MyApp.xcodeproj' | jq -s '.[].targetMembership | select(.targets | length == 0)'`
+  - `find "$(pwd)" \( -name "*.swift" -o -name "*.m" -o -name "*.mm" -o -name "*.c" -o -name "*.cc" -o -name "*.cpp" \) -not -path "$(pwd)/.build/*" -not -path "$(pwd)/**/*.xcodeproj/*" -print0 | xargs -0 -n1 -I{} sh -c 'xcq "targetMembership(path: \"{}\", pathMode: ABSOLUTE) { path targets }" --project MyApp.xcodeproj' | jq -s '.[].targetMembership | select(.targets | length == 0)'`
 
 ## Notes
 

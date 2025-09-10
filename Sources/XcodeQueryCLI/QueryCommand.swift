@@ -7,7 +7,7 @@ public struct QueryCommand: AsyncParsableCommand {
         commandName: "query",
         abstract: "Execute a GraphQL query against an Xcode project"
     )
-    @Argument(help: "GraphQL-style query to execute (e.g., { targets { name type } })")
+    @Argument(help: "GraphQL-style selection without top-level braces (e.g., targets { name type })")
     var query: String
 
     @Option(name: [.customShort("p"), .long], help: "Path to .xcodeproj (optional)")

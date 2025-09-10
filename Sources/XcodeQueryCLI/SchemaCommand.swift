@@ -121,18 +121,18 @@ public struct SchemaCommand: AsyncParsableCommand {
         // Examples
         out.append(Cx.b("Examples:"))
         func br(_ s: String) -> String { Cx.d(s) }
-        // 1) { targets { name type } }
-        out.append("- " + br("{") + " " + Cx.s("targets", Cx.green) + " " + br("{") + " " + Cx.s("name", Cx.green) + " " + Cx.s("type", Cx.green) + " " + br("}") + " " + br("}"))
-        // 2) { dependencies(name: "App") { name } }
-        out.append("- " + br("{") + " " + Cx.s("dependencies", Cx.green) + br("(") + Cx.s("name:", Cx.yellow) + " " + Cx.s("\"App\"", Cx.magenta) + br(")") + " " + br("{") + " " + Cx.s("name", Cx.green) + " " + br("}") + " " + br("}"))
-        // 3) { targets(type: UNIT_TEST) { dependencies(recursive: true) { name } } }
-        out.append("- " + br("{") + " " + Cx.s("targets", Cx.green) + br("(") + Cx.s("type:", Cx.yellow) + " " + Cx.s("UNIT_TEST", Cx.magenta) + br(")") + " " + br("{") + " " + Cx.s("dependencies", Cx.green) + br("(") + Cx.s("recursive:", Cx.yellow) + " true" + br(")") + " " + br("{") + " " + Cx.s("name", Cx.green) + " " + br("}") + " " + br("}") + " " + br("}"))
-        // 4) { targetSources(pathMode: NORMALIZED) { target path } }
-        out.append("- " + br("{") + " " + Cx.s("targetSources", Cx.green) + br("(") + Cx.s("pathMode:", Cx.yellow) + " " + Cx.s("NORMALIZED", Cx.magenta) + br(")") + " " + br("{") + " " + Cx.s("target", Cx.green) + " " + Cx.s("path", Cx.green) + " " + br("}") + " " + br("}"))
-        // 5) { targetMembership(path: "Shared/Shared.swift", pathMode: NORMALIZED) { path targets } }
-        out.append("- " + br("{") + " " + Cx.s("targetMembership", Cx.green) + br("(") + Cx.s("path:", Cx.yellow) + " " + Cx.s("\"Shared/Shared.swift\"", Cx.magenta) + Cx.d(", ") + Cx.s("pathMode:", Cx.yellow) + " " + Cx.s("NORMALIZED", Cx.magenta) + br(")") + " " + br("{") + " " + Cx.s("path", Cx.green) + " " + Cx.s("targets", Cx.green) + " " + br("}") + " " + br("}"))
-        // 6) { targetBuildScripts(filter: { stage: PRE }) { target name stage } }
-        out.append("- " + br("{") + " " + Cx.s("targetBuildScripts", Cx.green) + br("(") + Cx.s("filter:", Cx.yellow) + " " + br("{") + " " + Cx.s("stage:", Cx.yellow) + " " + Cx.s("PRE", Cx.magenta) + " " + br("}") + br(")") + " " + br("{") + " " + Cx.s("target", Cx.green) + " " + Cx.s("name", Cx.green) + " " + Cx.s("stage", Cx.green) + " " + br("}") + " " + br("}"))
+        // 1) targets { name type }
+        out.append("- " + Cx.s("targets", Cx.green) + " " + br("{") + " " + Cx.s("name", Cx.green) + " " + Cx.s("type", Cx.green) + " " + br("}"))
+        // 2) dependencies(name: \"App\") { name }
+        out.append("- " + Cx.s("dependencies", Cx.green) + br("(") + Cx.s("name:", Cx.yellow) + " " + Cx.s("\"App\"", Cx.magenta) + br(")") + " " + br("{") + " " + Cx.s("name", Cx.green) + " " + br("}"))
+        // 3) targets(type: UNIT_TEST) { dependencies(recursive: true) { name } }
+        out.append("- " + Cx.s("targets", Cx.green) + br("(") + Cx.s("type:", Cx.yellow) + " " + Cx.s("UNIT_TEST", Cx.magenta) + br(")") + " " + br("{") + " " + Cx.s("dependencies", Cx.green) + br("(") + Cx.s("recursive:", Cx.yellow) + " true" + br(")") + " " + br("{") + " " + Cx.s("name", Cx.green) + " " + br("}"))
+        // 4) targetSources(pathMode: NORMALIZED) { target path }
+        out.append("- " + Cx.s("targetSources", Cx.green) + br("(") + Cx.s("pathMode:", Cx.yellow) + " " + Cx.s("NORMALIZED", Cx.magenta) + br(")") + " " + br("{") + " " + Cx.s("target", Cx.green) + " " + Cx.s("path", Cx.green) + " " + br("}"))
+        // 5) targetMembership(path: \"Shared/Shared.swift\", pathMode: NORMALIZED) { path targets }
+        out.append("- " + Cx.s("targetMembership", Cx.green) + br("(") + Cx.s("path:", Cx.yellow) + " " + Cx.s("\"Shared/Shared.swift\"", Cx.magenta) + Cx.d(", ") + Cx.s("pathMode:", Cx.yellow) + " " + Cx.s("NORMALIZED", Cx.magenta) + br(")") + " " + br("{") + " " + Cx.s("path", Cx.green) + " " + Cx.s("targets", Cx.green) + " " + br("}"))
+        // 6) targetBuildScripts(filter: { stage: PRE }) { target name stage }
+        out.append("- " + Cx.s("targetBuildScripts", Cx.green) + br("(") + Cx.s("filter:", Cx.yellow) + " " + br("{") + " " + Cx.s("stage:", Cx.yellow) + " " + Cx.s("PRE", Cx.magenta) + " " + br("}") + br(")") + " " + br("{") + " " + Cx.s("target", Cx.green) + " " + Cx.s("name", Cx.green) + " " + Cx.s("stage", Cx.green) + " " + br("}"))
         out.append("")
         return out.joined(separator: "\n")
     }
