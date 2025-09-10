@@ -8,11 +8,8 @@ Xcode Query (xcq) uses a GraphQL-style query language for predictable, composabl
 
 - Recommended (tap):
   - `brew tap alvarhansen/xcodequery`
-  - Stable: `brew install xcq`
   - HEAD: `brew install --HEAD xcq`
-
-- Local checkout (build from source):
-  - `brew install --build-from-source --formula ./HomebrewFormula/xcq.rb`
+  - Stable (Not yet available): `brew install xcq`
 
 After install, verify: `xcq --help`
 
