@@ -4,11 +4,10 @@ Xcode Query (xcq) uses a GraphQL-style query language for predictable, composabl
 
 ## Install via Homebrew
 
-- Stable (once a version is tagged and formula updated):
-  - `brew install https://raw.githubusercontent.com/alvarhansen/XcodeQuery/main/HomebrewFormula/xcq.rb`
-
-- HEAD (latest on main):
-  - `brew install --HEAD https://raw.githubusercontent.com/alvarhansen/XcodeQuery/main/HomebrewFormula/xcq.rb`
+- Recommended (tap):
+  - `brew tap alvarhansen/xcodequery`
+  - Stable: `brew install xcq`
+  - HEAD: `brew install --HEAD xcq`
 
 - Local checkout (build from source):
   - `brew install --build-from-source --formula ./HomebrewFormula/xcq.rb`
@@ -118,8 +117,9 @@ Types and inputs:
        - `curl -L https://github.com/alvarhansen/XcodeQuery/archive/refs/tags/v0.1.0.tar.gz | shasum -a 256`
    - Commit and push the formula change on main.
 
-4) Users can then install stable via:
-   - `brew install https://raw.githubusercontent.com/alvarhansen/XcodeQuery/main/HomebrewFormula/xcq.rb`
+4) Users can then install via the tap:
+   - Stable: `brew tap alvarhansen/xcodequery && brew install xcq`
+   - HEAD: `brew tap alvarhansen/xcodequery && brew install --HEAD xcq`
 
 ## Homebrew Tap
 

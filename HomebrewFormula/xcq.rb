@@ -13,7 +13,8 @@ class Xcq < Formula
   depends_on xcode: :build
 
   def install
-    system "swift", "build", "-c", "release"
+    ENV["SWIFTPM_DISABLE_SANDBOX"] = "1"
+    system "swift", "build", "--disable-sandbox", "-c", "release"
     bin.install ".build/release/xcq"
   end
 
