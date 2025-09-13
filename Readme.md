@@ -18,6 +18,16 @@ After install, verify: `xcq --help`
 - Run against the project in the current directory: `xcq 'targets { name type }'`
 - Or specify a project: `xcq 'targets { name }' --project MyApp.xcodeproj`
 
+### Interactive Mode
+
+- Start interactive mode: `xcq interactive [--project PATH] [--debounce MS] [--color|--no-color]`
+- Behavior:
+  - On a TTY, shows a single-line prompt at the bottom and a live preview above it.
+  - Evaluates your query as you type (debounced; default 200ms) and renders pretty JSON.
+  - Errors are shown inline in the preview area; press ESC or Ctrl+C to exit; Ctrl+U clears the line.
+  - In non-TTY environments (e.g., piped input), reads line-by-line from stdin and prints pretty JSON.
+- Output is always pretty-printed JSON in interactive mode.
+
 ## Schema Overview
 
 Top-level fields (selection required):

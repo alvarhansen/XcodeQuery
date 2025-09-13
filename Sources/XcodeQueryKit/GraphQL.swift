@@ -335,7 +335,7 @@ final class GraphQLExecutor {
                     filtered = filtered.filter { matchString($0, key: "path", obj: o) }
                 }
                 guard let sel2 = f.selection else { throw GQLError.exec("sources requires selection set") }
-                obj["sources"] = .array(filtered.map { path in try! resolveLeafObject(["path": .string(path)], selection: sel2) })
+                obj["sources"] = .array(try filtered.map { path in try resolveLeafObject(["path": .string(path)], selection: sel2) })
             case "resources":
                 let mode = PathModeGQL.from(arg: f.arguments["pathMode"]) ?? .fileRef
                 let paths = try resourceFiles(targetName: t.name, mode: mode)
@@ -344,7 +344,7 @@ final class GraphQLExecutor {
                     filtered = filtered.filter { matchString($0, key: "path", obj: o) }
                 }
                 guard let sel2 = f.selection else { throw GQLError.exec("resources requires selection set") }
-                obj["resources"] = .array(filtered.map { path in try! resolveLeafObject(["path": .string(path)], selection: sel2) })
+                obj["resources"] = .array(try filtered.map { path in try resolveLeafObject(["path": .string(path)], selection: sel2) })
             case "buildScripts":
                 let all = try buildScripts(targetName: t.name)
                 var filtered = all
@@ -352,7 +352,7 @@ final class GraphQLExecutor {
                     filtered = filtered.filter { matchBuildScript($0, obj: o) }
                 }
                 guard let sel2 = f.selection else { throw GQLError.exec("buildScripts requires selection set") }
-                obj["buildScripts"] = .array(filtered.map { bs in try! resolveLeafObject([
+                obj["buildScripts"] = .array(try filtered.map { bs in try resolveLeafObject([
                     "name": bs.name.map(JSONValue.string) ?? .null,
                     "stage": .string(bs.stage.rawValue.uppercased()),
                     "inputPaths": .array(bs.inputPaths.map(JSONValue.string)),
@@ -396,7 +396,7 @@ final class GraphQLExecutor {
             }
         }
         guard let sel = f.selection else { throw GQLError.exec("targetSources requires selection") }
-        return .array(rows.map { row in try! resolveLeafObject(["target": .string(row.target), "path": .string(row.path)], selection: sel) })
+        return .array(try rows.map { row in try resolveLeafObject(["target": .string(row.target), "path": .string(row.path)], selection: sel) })
     }
 
     private func resolveTargetResources(field f: GQLField) throws -> JSONValue {
@@ -415,7 +415,7 @@ final class GraphQLExecutor {
             }
         }
         guard let sel = f.selection else { throw GQLError.exec("targetResources requires selection") }
-        return .array(rows.map { row in try! resolveLeafObject(["target": .string(row.target), "path": .string(row.path)], selection: sel) })
+        return .array(try rows.map { row in try resolveLeafObject(["target": .string(row.target), "path": .string(row.path)], selection: sel) })
     }
 
     private func resolveTargetDependencies(field f: GQLField) throws -> JSONValue {
@@ -430,7 +430,7 @@ final class GraphQLExecutor {
             rows = rows.filter { matchTargetFilter($0.dep, o) }
         }
         guard let sel = f.selection else { throw GQLError.exec("targetDependencies requires selection") }
-        return .array(rows.map { row in try! resolveLeafObject([
+        return .array(try rows.map { row in try resolveLeafObject([
             "target": .string(row.target),
             "name": .string(row.dep.name),
             "type": .string(row.dep.type.gqlEnum)
@@ -447,7 +447,7 @@ final class GraphQLExecutor {
             rows = rows.filter { matchBuildScript($0.bs, obj: o) }
         }
         guard let sel = f.selection else { throw GQLError.exec("targetBuildScripts requires selection") }
-        return .array(rows.map { row in try! resolveLeafObject([
+        return .array(try rows.map { row in try resolveLeafObject([
             "target": .string(row.target),
             "name": row.bs.name.map(JSONValue.string) ?? .null,
             "stage": .string(row.bs.stage.rawValue.uppercased()),
