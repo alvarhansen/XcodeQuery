@@ -22,6 +22,11 @@ final class InteractiveSession {
     private var lastWindowStart: Int = 0
     private var lastInputVisibleLines: Int = 1
     private let maxInputHeight: Int = 10
+    // Completions
+    private var suggestionsActive: Bool = false
+    private var suggestions: [String] = []
+    private var selectedSuggestion: Int = 0
+    private let completer = CompletionProvider()
     private var evalTask: Task<Void, Never>? = nil
     private var revision: UInt64 = 0
     private let prompt = "> "
@@ -46,18 +51,19 @@ final class InteractiveSession {
                 escSeq.append(ch)
                 // Expect ESC [ <code>
                 if escSeq.count == 2 && escSeq[1] != 0x5B { // not '[' -> treat as lone ESC
+                    if suggestionsActive { suggestionsActive = false; render(); escSeq.removeAll(); continue }
                     return // exit
                 }
                 if escSeq.count >= 3 {
                     let code = escSeq[2]
                     if code == 0x43 { // 'C' -> Right
-                        moveCursorRight()
+                        if suggestionsActive { acceptCurrentSuggestion() } else { moveCursorRight() }
                     } else if code == 0x44 { // 'D' -> Left
                         moveCursorLeft()
                     } else if code == 0x41 { // Up
-                        moveCursorUp()
+                        if suggestionsActive { moveSuggestionUp() } else { moveCursorUp() }
                     } else if code == 0x42 { // Down
-                        moveCursorDown()
+                        if suggestionsActive { moveSuggestionDown() } else { moveCursorDown() }
                     } else {
                         // Unhandled escape sequence: ignore
                     }
@@ -70,18 +76,20 @@ final class InteractiveSession {
             switch ch {
             case 3: // Ctrl+C
                 return
+            case 9: // Tab -> toggle/show completions
+                handleTab()
             case 21: // Ctrl+U -> clear current line
                 lines[cursorRow] = ""; cursorCol = 0; scheduleEval(); render(preview: hintText())
             case 127, 8: // Backspace
                 handleBackspace()
             case 10, 13: // Enter
-                // Insert newline and trigger immediate evaluation
-                insertNewline(); scheduleEval(immediate: true); render()
+                if suggestionsActive { acceptCurrentSuggestion() } else { insertNewline(); scheduleEval(immediate: true); render() }
             default:
                 if ch >= 32 { // printable
                     let scalar = UnicodeScalar(ch)
                     insertCharacter(Character(scalar))
                     scheduleEval(); render()
+                    if suggestionsActive { refreshSuggestions() }
                 }
             }
             await Task.yield()
@@ -138,6 +146,23 @@ final class InteractiveSession {
             s += "\r" + line + "\n"
         }
 
+        // Suggestions panel (above input)
+        var suggestionsLinesCount = 0
+        if suggestionsActive && !suggestions.isEmpty {
+            let maxShow = min(8, suggestions.count)
+            s += "\r" + colorize("Suggestions:", color: .dim) + "\n"
+            suggestionsLinesCount += 1
+            for i in 0..<maxShow {
+                let item = suggestions[i]
+                if i == selectedSuggestion {
+                    s += "\r" + colorize("› " + item, color: .cyan) + "\n"
+                } else {
+                    s += "\r" + "  " + item + "\n"
+                }
+                suggestionsLinesCount += 1
+            }
+        }
+
         // Compute input window
         let totalLines = lines.count
         let windowHeight = min(maxInputHeight, totalLines)
@@ -160,7 +185,7 @@ final class InteractiveSession {
         if targetCol > 0 { s += "\u{001B}[\(targetCol)C" }
 
         // Update last counters
-        lastPreviewLines = max(1, previewLines.count)
+        lastPreviewLines = max(1, previewLines.count + suggestionsLinesCount)
         lastWindowStart = windowStart
         lastInputVisibleLines = windowEnd - windowStart
 
@@ -270,7 +295,7 @@ final class InteractiveSession {
     }
 
     // MARK: - Color helper
-    private enum AnsiColor { case red, dim }
+    private enum AnsiColor { case red, dim, cyan }
     @MainActor
     private func colorize(_ s: String, color: AnsiColor) -> String {
         guard colorEnabled else { return s }
@@ -279,8 +304,76 @@ final class InteractiveSession {
         switch color {
         case .red: code = "31"
         case .dim: code = "2"
+        case .cyan: code = "36"
         }
         return "\(esc)[\(code)m\(s)\(esc)[0m"
+    }
+
+    // MARK: - Completions handling
+    @MainActor private func handleTab() {
+        if suggestionsActive {
+            // Toggle off without accepting
+            suggestionsActive = false
+            render()
+            return
+        }
+        refreshSuggestions()
+        if suggestions.isEmpty { return }
+        if suggestions.count == 1 {
+            applySuggestion(suggestions[0])
+            suggestionsActive = false
+            render()
+        } else {
+            suggestionsActive = true
+            selectedSuggestion = 0
+            render()
+        }
+    }
+    @MainActor private func refreshSuggestions() {
+        if let s = completer.suggest(lines: lines, row: cursorRow, col: cursorCol) {
+            suggestions = s.items
+        } else {
+            suggestions = []
+            suggestionsActive = false
+        }
+    }
+    @MainActor private func moveSuggestionUp() {
+        guard suggestionsActive, !suggestions.isEmpty else { return }
+        selectedSuggestion = (selectedSuggestion - 1 + suggestions.count) % suggestions.count
+    }
+    @MainActor private func moveSuggestionDown() {
+        guard suggestionsActive, !suggestions.isEmpty else { return }
+        selectedSuggestion = (selectedSuggestion + 1) % suggestions.count
+    }
+    @MainActor private func acceptCurrentSuggestion() {
+        guard suggestionsActive, !suggestions.isEmpty else { return }
+        applySuggestion(suggestions[selectedSuggestion])
+        suggestionsActive = false
+        render()
+    }
+    @MainActor private func applySuggestion(_ item: String) {
+        // Replace current word (identifier) on current line with the suggestion
+        let line = lines[cursorRow]
+        let (prefix, startCol, endCol) = currentWord(in: line, col: cursorCol)
+        let leftIdx = line.index(line.startIndex, offsetBy: startCol)
+        let rightIdx = line.index(line.startIndex, offsetBy: endCol)
+        var newLine = line
+        newLine.replaceSubrange(leftIdx..<rightIdx, with: item)
+        lines[cursorRow] = newLine
+        cursorCol = startCol + item.count
+        scheduleEval(); render()
+    }
+    @MainActor private func currentWord(in line: String, col: Int) -> (String, Int, Int) {
+        if line.isEmpty { return ("", col, col) }
+        let chars = Array(line)
+        let n = chars.count
+        var left = max(0, min(col, n))
+        var right = left
+        func isIdent(_ c: Character) -> Bool { c.isLetter || c.isNumber || c == "_" }
+        while left > 0 && isIdent(chars[left - 1]) { left -= 1 }
+        while right < n && isIdent(chars[right]) { right += 1 }
+        let prefix = left < right ? String(chars[left..<right]) : ""
+        return (prefix, left, right)
     }
 }
 
