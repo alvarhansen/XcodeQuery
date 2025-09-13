@@ -13,11 +13,15 @@ final class InteractiveSession {
         self.colorEnabled = colorEnabled
     }
 
-    // UI State
-    private var buffer: String = ""
-    private var cursor: Int = 0 // index in buffer (characters count)
+    // UI State (multiline)
+    private var lines: [String] = [""]
+    private var cursorRow: Int = 0
+    private var cursorCol: Int = 0 // character offset within current line
     private var lastPreviewLines: Int = 0
     private var previewCache: String = ""
+    private var lastWindowStart: Int = 0
+    private var lastInputVisibleLines: Int = 1
+    private let maxInputHeight: Int = 10
     private var evalTask: Task<Void, Never>? = nil
     private var revision: UInt64 = 0
     private let prompt = "> "
@@ -50,8 +54,10 @@ final class InteractiveSession {
                         moveCursorRight()
                     } else if code == 0x44 { // 'D' -> Left
                         moveCursorLeft()
-                    } else if code == 0x41 || code == 0x42 {
-                        // Up/Down ignored in single-line mode
+                    } else if code == 0x41 { // Up
+                        moveCursorUp()
+                    } else if code == 0x42 { // Down
+                        moveCursorDown()
                     } else {
                         // Unhandled escape sequence: ignore
                     }
@@ -64,25 +70,17 @@ final class InteractiveSession {
             switch ch {
             case 3: // Ctrl+C
                 return
-            case 21: // Ctrl+U -> clear line
-                buffer.removeAll(); cursor = 0; scheduleEval(); render(preview: hintText())
+            case 21: // Ctrl+U -> clear current line
+                lines[cursorRow] = ""; cursorCol = 0; scheduleEval(); render(preview: hintText())
             case 127, 8: // Backspace
-                if cursor > 0 {
-                    let idx = buffer.index(buffer.startIndex, offsetBy: cursor - 1)
-                    buffer.remove(at: idx)
-                    cursor -= 1
-                    scheduleEval(); render()
-                }
+                handleBackspace()
             case 10, 13: // Enter
-                // Trigger immediate evaluation (no newline in single-line mode)
-                scheduleEval(immediate: true)
+                // Insert newline and trigger immediate evaluation
+                insertNewline(); scheduleEval(immediate: true); render()
             default:
                 if ch >= 32 { // printable
                     let scalar = UnicodeScalar(ch)
-                    let c = Character(scalar)
-                    let idx = buffer.index(buffer.startIndex, offsetBy: cursor)
-                    buffer.insert(c, at: idx)
-                    cursor += 1
+                    insertCharacter(Character(scalar))
                     scheduleEval(); render()
                 }
             }
@@ -95,7 +93,7 @@ final class InteractiveSession {
         evalTask?.cancel()
         revision &+= 1
         let myRev = revision
-        let current = buffer
+        let current = lines.joined(separator: "\n")
         let delay = immediate ? 0 : debounceMs
         let coreBox = UncheckedSendable(self.core)
         let selfBox = WeakBox(self)
@@ -125,27 +123,46 @@ final class InteractiveSession {
         // Move to preview start (above input line) and clear
         if !initial {
             s += "\r" // start of line
-            if lastPreviewLines > 0 { s += "\u{001B}[\(lastPreviewLines)A" }
+            // Move up to top of preview: preview lines + cursor row within previous window
+            let prevRowInWindow = max(0, min(lastInputVisibleLines - 1, cursorRow - lastWindowStart))
+            let up = lastPreviewLines + prevRowInWindow
+            if up > 0 { s += "\u{001B}[\(up)A" }
             s += "\u{001B}[0J" // clear to end of screen
         }
 
         // Cache and write preview (CRLF to avoid raw-mode newline issues)
         if let p = preview { previewCache = p }
         let previewText = preview ?? previewCache
-        let lines = previewText.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        for line in lines {
+        let previewLines = previewText.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        for line in previewLines {
             s += "\r" + line + "\n"
         }
 
-        // Write prompt + buffer
-        s += "\r" + prompt + buffer
-        // Position cursor
-        let endPos = prompt.count + buffer.count
-        let targetPos = prompt.count + cursor
-        if endPos > targetPos { s += "\u{001B}[\(endPos - targetPos)D" }
+        // Compute input window
+        let totalLines = lines.count
+        let windowHeight = min(maxInputHeight, totalLines)
+        let windowStart = max(0, min(totalLines - windowHeight, cursorRow - (windowHeight - 1)))
+        let windowEnd = min(totalLines, windowStart + windowHeight)
 
-        // Update lastPreviewLines
-        lastPreviewLines = max(1, lines.count)
+        // Write input lines with prompt/indent
+        for i in windowStart..<windowEnd {
+            let prefix = (i == windowStart) ? prompt : "  "
+            s += "\r" + prefix + lines[i] + "\n"
+        }
+
+        // Position cursor within the input window
+        let rowInWindow = cursorRow - windowStart
+        let linesUp = (windowEnd - windowStart) - rowInWindow
+        if linesUp > 0 { s += "\u{001B}[\(linesUp)A" }
+        s += "\r"
+        let base = (rowInWindow == 0) ? prompt.count : 2
+        let targetCol = base + cursorCol
+        if targetCol > 0 { s += "\u{001B}[\(targetCol)C" }
+
+        // Update last counters
+        lastPreviewLines = max(1, previewLines.count)
+        lastWindowStart = windowStart
+        lastInputVisibleLines = windowEnd - windowStart
 
         out.write(Data(s.utf8))
     }
@@ -156,8 +173,71 @@ final class InteractiveSession {
     }
 
     // MARK: - Cursor movement
-    @MainActor private func moveCursorLeft() { if cursor > 0 { cursor -= 1 } }
-    @MainActor private func moveCursorRight() { if cursor < buffer.count { cursor += 1 } }
+    @MainActor private func moveCursorLeft() {
+        if cursorCol > 0 {
+            cursorCol -= 1
+        } else if cursorRow > 0 {
+            cursorRow -= 1
+            cursorCol = lines[cursorRow].count
+        }
+    }
+    @MainActor private func moveCursorRight() {
+        let len = lines[cursorRow].count
+        if cursorCol < len {
+            cursorCol += 1
+        } else if cursorRow + 1 < lines.count {
+            cursorRow += 1
+            cursorCol = 0
+        }
+    }
+    @MainActor private func moveCursorUp() {
+        if cursorRow > 0 {
+            cursorRow -= 1
+            cursorCol = min(cursorCol, lines[cursorRow].count)
+        }
+    }
+    @MainActor private func moveCursorDown() {
+        if cursorRow + 1 < lines.count {
+            cursorRow += 1
+            cursorCol = min(cursorCol, lines[cursorRow].count)
+        }
+    }
+
+    // Editing helpers
+    @MainActor private func insertCharacter(_ c: Character) {
+        var line = lines[cursorRow]
+        let idx = line.index(line.startIndex, offsetBy: cursorCol)
+        line.insert(c, at: idx)
+        lines[cursorRow] = line
+        cursorCol += 1
+    }
+    @MainActor private func handleBackspace() {
+        if cursorCol > 0 {
+            var line = lines[cursorRow]
+            let idx = line.index(line.startIndex, offsetBy: cursorCol - 1)
+            line.remove(at: idx)
+            lines[cursorRow] = line
+            cursorCol -= 1
+            scheduleEval(); render()
+        } else if cursorRow > 0 {
+            let prevLen = lines[cursorRow - 1].count
+            lines[cursorRow - 1] += lines[cursorRow]
+            lines.remove(at: cursorRow)
+            cursorRow -= 1
+            cursorCol = prevLen
+            scheduleEval(); render()
+        }
+    }
+    @MainActor private func insertNewline() {
+        let line = lines[cursorRow]
+        let splitIdx = line.index(line.startIndex, offsetBy: cursorCol)
+        let left = String(line[..<splitIdx])
+        let right = String(line[splitIdx...])
+        lines[cursorRow] = left
+        lines.insert(right, at: cursorRow + 1)
+        cursorRow += 1
+        cursorCol = 0
+    }
 
     // Render helpers for async tasks
     @MainActor

@@ -1,6 +1,7 @@
 import Foundation
 import ArgumentParser
 import Darwin
+import XcodeQueryKit
 
 public struct SchemaCommand: AsyncParsableCommand {
     public static let configuration = CommandConfiguration(
@@ -19,7 +20,7 @@ public struct SchemaCommand: AsyncParsableCommand {
         let env = ProcessInfo.processInfo.environment
         let force = env["XCQ_FORCE_COLOR"] == "1" || env["FORCE_COLOR"] == "1"
         let enableColor = noColor ? false : (yesColor || force || isatty(STDOUT_FILENO) == 1)
-        print(Self.renderSchema(color: enableColor))
+        print(Self.renderSchemaFromModel(color: enableColor))
     }
 
     // MARK: - Pretty schema renderer
@@ -138,5 +139,88 @@ public struct SchemaCommand: AsyncParsableCommand {
     }
 
     // Test hook
-    static func __test_renderSchema(useColor: Bool) -> String { renderSchema(color: useColor) }
+    static func __test_renderSchema(useColor: Bool) -> String { renderSchemaFromModel(color: useColor) }
+
+    // MARK: - New renderer backed by static schema model
+    private static func renderSchemaFromModel(color: Bool) -> String {
+        let Cx = C(enabled: color)
+        var out: [String] = []
+        out.append("")
+        out.append(Cx.b(Cx.s("XcodeQuery GraphQL Schema", Cx.cyan)))
+        out.append("")
+
+        // Top-level fields
+        out.append(Cx.b("Top-level fields (selection required):"))
+        for f in XcodeQuerySchema.schema.topLevel {
+            out.append("- " + Cx.s(f.name, Cx.green) + formatArgs(f.args, Cx) + Cx.d(": ") + Cx.s(render(f.type), Cx.cyan))
+        }
+        out.append("")
+
+        // Types
+        out.append(Cx.b("Types:"))
+        for t in XcodeQuerySchema.schema.types {
+            out.append("- " + Cx.s("type", Cx.blue) + " " + Cx.s(t.name, Cx.cyan) + " {")
+            for f in t.fields {
+                if f.args.isEmpty {
+                    out.append("    " + Cx.s(f.name + ":", Cx.yellow) + " " + Cx.s(render(f.type), Cx.cyan))
+                } else {
+                    out.append("    " + Cx.s(f.name, Cx.green) + formatArgs(f.args, Cx) + Cx.d(":") + " " + Cx.s(render(f.type), Cx.cyan))
+                }
+            }
+            out.append("  }")
+        }
+        out.append("")
+
+        // Inputs
+        out.append(Cx.b("Filter inputs:"))
+        for i in XcodeQuerySchema.schema.inputs {
+            out.append("- " + Cx.s("input", Cx.blue) + " " + Cx.s(i.name, Cx.cyan) + " {")
+            for a in i.fields {
+                out.append("    " + Cx.s(a.name + ":", Cx.yellow) + " " + Cx.s(render(a.type), Cx.cyan))
+            }
+            out.append("  }")
+        }
+        out.append("")
+
+        // Enums
+        out.append(Cx.b("Enums:"))
+        for e in XcodeQuerySchema.schema.enums {
+            out.append("- " + Cx.s("enum", Cx.blue) + " " + Cx.s(e.name, Cx.cyan) + " " + Cx.d("(") + e.cases.map { Cx.s($0, Cx.magenta) }.joined(separator: Cx.d(", ")) + Cx.d(")"))
+        }
+        out.append("")
+
+        // Examples (concise)
+        out.append(Cx.b("Examples:"))
+        func br(_ s: String) -> String { Cx.d(s) }
+        out.append("- " + Cx.s("targets", Cx.green) + br(" {") + " " + Cx.s("name", Cx.green) + " " + Cx.s("type", Cx.green) + " " + br("}"))
+        out.append("- " + Cx.s("dependencies", Cx.green) + br("(") + Cx.s("name:", Cx.yellow) + " \"App\"" + Cx.d(", ") + Cx.s("recursive:", Cx.yellow) + " true" + br(") ") + br("{") + " " + Cx.s("name", Cx.green) + " " + br("}"))
+        out.append("- " + Cx.s("targetSources", Cx.green) + br("(") + Cx.s("pathMode:", Cx.yellow) + " " + Cx.s("NORMALIZED", Cx.magenta) + br(") ") + br("{") + " " + Cx.s("target", Cx.green) + " " + Cx.s("path", Cx.green) + " " + br("}"))
+        out.append("")
+
+        return out.joined(separator: "\n")
+    }
+
+    private static func formatArgs(_ args: [XQArgument], _ Cx: C) -> String {
+        if args.isEmpty { return "" }
+        let parts = args.map { a -> String in
+            var s = Cx.s(a.name + ":", Cx.yellow) + " " + Cx.s(render(a.type), Cx.cyan)
+            if let d = a.defaultValue { s += Cx.d(" = ") + Cx.s(d, Cx.magenta) }
+            return s
+        }
+        return Cx.d("(") + parts.joined(separator: Cx.d(", ")) + Cx.d(")")
+    }
+
+    private static func render(_ t: XQSTypeRef) -> String {
+        switch t {
+        case .named(let name, let nonNull):
+            return name + (nonNull ? "!" : "")
+        case .list(of: let inner, let nonNull, let elementNonNull):
+            let innerText: String
+            switch inner {
+            case .named(let n, _): innerText = n + (elementNonNull ? "!" : "")
+            case .list: innerText = render(inner)
+            }
+            return "[" + innerText + "]" + (nonNull ? "!" : "")
+        }
+    }
 }
