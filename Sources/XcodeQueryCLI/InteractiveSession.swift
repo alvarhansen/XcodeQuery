@@ -137,46 +137,60 @@ final class InteractiveSession {
             s += "\u{001B}[0J" // clear to end of screen
         }
 
-        // Cache and write preview (CRLF to avoid raw-mode newline issues)
+        // Cache preview text and compute lines
         if let p = preview { previewCache = p }
         let previewText = preview ?? previewCache
         let previewLines = previewText.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        for line in previewLines {
-            s += "\r" + line + "\n"
-        }
 
-        // Suggestions panel (above input)
-        var suggestionsLinesCount = 0
-        if suggestionsActive && !suggestions.isEmpty {
-            let maxShow = min(8, suggestions.count)
-            s += "\r" + colorize("Suggestions:", color: .dim) + "\n"
-            suggestionsLinesCount += 1
-            for i in 0..<maxShow {
-                let item = suggestions[i]
-                if i == selectedSuggestion {
-                    s += "\r" + colorize("› " + item, color: .cyan) + "\n"
-                } else {
-                    s += "\r" + "  " + item + "\n"
-                }
-                suggestionsLinesCount += 1
-            }
-        }
+        // Suggestions panel sizing
+        let maxSuggestions = suggestionsActive ? min(8, suggestions.count) : 0
+        var suggestionsLinesCount = suggestionsActive && !suggestions.isEmpty ? 1 + maxSuggestions : 0
 
         // Compute input window
         let totalLines = lines.count
         let windowHeight = min(maxInputHeight, totalLines)
         let windowStart = max(0, min(totalLines - windowHeight, cursorRow - (windowHeight - 1)))
         let windowEnd = min(totalLines, windowStart + windowHeight)
+        let inputCount = windowEnd - windowStart
 
-        // Write input lines with prompt/indent
+        // Pin render region to bottom when terminal rows are known
+        if let rows = Self.terminalRows() {
+            // Move to bottom-left
+            s += "\u{001B}[\(rows);1H"
+            // Move up to start of render region
+            let totalRenderHeight = previewLines.count + suggestionsLinesCount + inputCount
+            let up = max(0, totalRenderHeight - 1)
+            if up > 0 { s += "\u{001B}[\(up)A" }
+            // Clear to end of screen
+            s += "\u{001B}[0J"
+        } else {
+            // Fallback: clear from current pos
+            s += "\r\u{001B}[0J"
+        }
+
+        // Write preview (CRLF)
+        for line in previewLines { s += "\r" + line + "\n" }
+        // Write suggestions panel if active
+        if suggestionsLinesCount > 0 {
+            s += "\r" + colorize("Suggestions:", color: .dim) + "\n"
+            for i in 0..<maxSuggestions {
+                let item = suggestions[i]
+                if i == selectedSuggestion { s += "\r" + colorize("› " + item, color: .cyan) + "\n" }
+                else { s += "\r" + "  " + item + "\n" }
+            }
+        }
+
+        // Write input lines with prompt/indent; no newline after last line to avoid scroll
         for i in windowStart..<windowEnd {
             let prefix = (i == windowStart) ? prompt : "  "
-            s += "\r" + prefix + lines[i] + "\n"
+            let isLast = (i == windowEnd - 1)
+            s += "\r" + prefix + lines[i]
+            if !isLast { s += "\n" }
         }
 
         // Position cursor within the input window
         let rowInWindow = cursorRow - windowStart
-        let linesUp = (windowEnd - windowStart) - rowInWindow
+        let linesUp = (inputCount - 1) - rowInWindow
         if linesUp > 0 { s += "\u{001B}[\(linesUp)A" }
         s += "\r"
         let base = (rowInWindow == 0) ? prompt.count : 2
@@ -189,6 +203,11 @@ final class InteractiveSession {
         lastInputVisibleLines = windowEnd - windowStart
 
         out.write(Data(s.utf8))
+    }
+
+    private static func terminalRows() -> Int? {
+        var ws = winsize()
+        return ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_row > 0 ? Int(ws.ws_row) : nil
     }
 
     @MainActor
