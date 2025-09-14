@@ -51,7 +51,6 @@ final class InteractiveSession {
                 escSeq.append(ch)
                 // Expect ESC [ <code>
                 if escSeq.count == 2 && escSeq[1] != 0x5B { // not '[' -> treat as lone ESC
-                    if suggestionsActive { suggestionsActive = false; render(); escSeq.removeAll(); continue }
                     return // exit
                 }
                 if escSeq.count >= 3 {
