@@ -122,6 +122,33 @@ final class CompletionProviderTests: XCTestCase {
         XCTAssertFalse(items.contains("targets"))
     }
 
+    func testInsertionBehaviorAddsBracesWhereAppropriate() {
+        let cp = CompletionProvider()
+        // Selection field 'dependencies' needs selection braces
+        let sel = ["targets { dep"]
+        let ins1 = cp.insertionBehavior(lines: sel, row: 0, col: sel[0].count, selected: "dependencies")
+        XCTAssertTrue(ins1.addSelectionBraces)
+
+        // Filter key 'name' needs input object braces
+        let fil = ["targets(filter: { na"]
+        let ins2 = cp.insertionBehavior(lines: fil, row: 0, col: fil[0].count, selected: "name")
+        XCTAssertTrue(ins2.addInputObjectBraces)
+
+        // Arg 'type' is enum, no braces
+        let arg = ["targets( ty"]
+        let ins3 = cp.insertionBehavior(lines: arg, row: 0, col: arg[0].count, selected: "type")
+        XCTAssertFalse(ins3.addInputObjectBraces)
+        XCTAssertFalse(ins3.addSelectionBraces)
+    }
+
+    func testRootInsertionAddsSelectionBracesForTargets() {
+        let cp = CompletionProvider()
+        let lines = ["tar"]
+        let ins = cp.insertionBehavior(lines: lines, row: 0, col: lines[0].count, selected: "targets")
+        XCTAssertTrue(ins.addSelectionBraces)
+        XCTAssertFalse(ins.addInputObjectBraces)
+    }
+
     func testBuildScriptFilterStringMatchNested() {
         let cp = CompletionProvider()
         let nameNested = ["targetBuildScripts(filter: { name: {"]

@@ -404,13 +404,27 @@ final class InteractiveSession {
     @MainActor private func applySuggestion(_ item: String) {
         // Replace current word (identifier) on current line with the suggestion
         let line = lines[cursorRow]
-        let (prefix, startCol, endCol) = currentWord(in: line, col: cursorCol)
+        let (_, startCol, endCol) = currentWord(in: line, col: cursorCol)
         let leftIdx = line.index(line.startIndex, offsetBy: startCol)
         let rightIdx = line.index(line.startIndex, offsetBy: endCol)
+
+        // Decide if we append braces
+        let behavior = completer.insertionBehavior(lines: lines, row: cursorRow, col: cursorCol, selected: item)
+
+        var insertion = item
+        var newCursorCol = startCol + item.count
+        if behavior.addInputObjectBraces {
+            insertion += ": { }"
+            newCursorCol = startCol + item.count + 3 // after '{ '
+        } else if behavior.addSelectionBraces {
+            insertion += " { }"
+            newCursorCol = startCol + item.count + 3
+        }
+
         var newLine = line
-        newLine.replaceSubrange(leftIdx..<rightIdx, with: item)
+        newLine.replaceSubrange(leftIdx..<rightIdx, with: insertion)
         lines[cursorRow] = newLine
-        cursorCol = startCol + item.count
+        cursorCol = newCursorCol
         scheduleEval(); render()
     }
     @MainActor private func currentWord(in line: String, col: Int) -> (String, Int, Int) {

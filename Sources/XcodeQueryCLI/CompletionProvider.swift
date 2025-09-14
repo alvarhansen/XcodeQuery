@@ -3,6 +3,7 @@ import XcodeQueryKit
 
 struct CompletionProvider {
     struct Suggestions { let items: [String]; let replaceStartCol: Int; let replaceEndCol: Int }
+    struct Insertion { let addSelectionBraces: Bool; let addInputObjectBraces: Bool }
 
     private let schema: XQSchema
     private let typesByName: [String: XQObjectType]
@@ -12,6 +13,48 @@ struct CompletionProvider {
         self.schema = schema
         self.typesByName = Dictionary(uniqueKeysWithValues: schema.types.map { ($0.name, $0) })
         self.inputsByName = Dictionary(uniqueKeysWithValues: schema.inputs.map { ($0.name, $0) })
+    }
+
+    private func underlyingObject(_ t: XQSTypeRef) -> String? {
+        switch t {
+        case .named(let name, _): return typesByName[name] != nil ? name : nil
+        case .list(let of, _, _): return underlyingObject(of)
+        }
+    }
+    private func underlyingInput(_ t: XQSTypeRef) -> XQInputObjectType? {
+        switch t {
+        case .named(let name, _): return inputsByName[name]
+        case .list(let of, _, _): return underlyingInput(of)
+        }
+    }
+
+    // Decide if accepting a suggestion should append braces and where.
+    func insertionBehavior(lines: [String], row: Int, col: Int, selected: String) -> Insertion {
+        let ctx = scanContext(lines: lines, row: row, col: col)
+        switch ctx.mode {
+        case .root:
+            if let f = schema.topLevel.first(where: { $0.name == selected }) {
+                if underlyingObject(f.type) != nil { return Insertion(addSelectionBraces: true, addInputObjectBraces: false) }
+            }
+            return Insertion(addSelectionBraces: false, addInputObjectBraces: false)
+        case .selection(let typeName):
+            if let obj = typesByName[typeName], let f = obj.fields.first(where: { $0.name == selected }) {
+                if underlyingObject(f.type) != nil { return Insertion(addSelectionBraces: true, addInputObjectBraces: false) }
+            }
+            return Insertion(addSelectionBraces: false, addInputObjectBraces: false)
+        case .inputKeys(let input):
+            if let arg = input.fields.first(where: { $0.name == selected }) {
+                if underlyingInput(arg.type) != nil { return Insertion(addSelectionBraces: false, addInputObjectBraces: true) }
+            }
+            return Insertion(addSelectionBraces: false, addInputObjectBraces: false)
+        case .arguments(_, let field, _, _):
+            if let arg = field.args.first(where: { $0.name == selected }) {
+                if underlyingInput(arg.type) != nil { return Insertion(addSelectionBraces: false, addInputObjectBraces: true) }
+            }
+            return Insertion(addSelectionBraces: false, addInputObjectBraces: false)
+        default:
+            return Insertion(addSelectionBraces: false, addInputObjectBraces: false)
+        }
     }
 
     func suggest(lines: [String], row: Int, col: Int) -> Suggestions? {
