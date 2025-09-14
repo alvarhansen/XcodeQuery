@@ -35,7 +35,7 @@ final class InteractiveSession {
     private var origTerm = termios()
 
     @MainActor
-    func start() async throws {
+    func start() async throws -> String {
         try enterRawMode()
         defer { restoreTerminal() }
         render(initial: true, preview: hintText())
@@ -49,32 +49,46 @@ final class InteractiveSession {
             if !escSeq.isEmpty || ch == 0x1B { // Escape or part of sequence
                 if ch == 0x1B { escSeq = [0x1B]; continue }
                 escSeq.append(ch)
-                // Expect ESC [ <code>
-                if escSeq.count == 2 && escSeq[1] != 0x5B { // not '[' -> treat as lone ESC
-                    return // exit
-                }
-                if escSeq.count >= 3 {
-                    let code = escSeq[2]
-                    if code == 0x43 { // 'C' -> Right
-                        if suggestionsActive { acceptCurrentSuggestion() } else { moveCursorRight() }
-                    } else if code == 0x44 { // 'D' -> Left
-                        moveCursorLeft()
-                    } else if code == 0x41 { // Up
-                        if suggestionsActive { moveSuggestionUp() } else { moveCursorUp() }
-                    } else if code == 0x42 { // Down
-                        if suggestionsActive { moveSuggestionDown() } else { moveCursorDown() }
+                // Two-byte ESC combos (Alt+b/f) or ESC alone
+                if escSeq.count == 2 {
+                    let second = escSeq[1]
+                    if second == 0x5B { /* CSI, wait for more */ }
+                    else if second == 0x62 { // 'b' => move word left
+                        moveWordLeft(); escSeq.removeAll(keepingCapacity: true); render(); continue
+                    } else if second == 0x66 { // 'f' => move word right
+                        moveWordRight(); escSeq.removeAll(keepingCapacity: true); render(); continue
                     } else {
-                        // Unhandled escape sequence: ignore
+                        return lines.joined(separator: "\n")
                     }
-                    escSeq.removeAll(keepingCapacity: true)
-                    render()
+                }
+                // CSI sequences; act on final byte
+                if escSeq.count >= 3 {
+                    let last = escSeq.last!
+                    if (0x41...0x5A).contains(last) { // final letter
+                        let isAlt = escSeq.contains(0x3B) && escSeq.contains(0x33) // contains ';3'
+                        switch last {
+                        case 0x43: // 'C' right
+                            if suggestionsActive { acceptCurrentSuggestion() }
+                            else if isAlt { moveWordRight() } else { moveCursorRight() }
+                        case 0x44: // 'D' left
+                            if isAlt { moveWordLeft() } else { moveCursorLeft() }
+                        case 0x41: // 'A' up
+                            if suggestionsActive { moveSuggestionUp() } else { moveCursorUp() }
+                        case 0x42: // 'B' down
+                            if suggestionsActive { moveSuggestionDown() } else { moveCursorDown() }
+                        default:
+                            break
+                        }
+                        escSeq.removeAll(keepingCapacity: true)
+                        render()
+                    }
                 }
                 continue
             }
 
             switch ch {
             case 3: // Ctrl+C
-                return
+                return lines.joined(separator: "\n")
             case 9: // Tab -> toggle/show completions
                 handleTab()
             case 21: // Ctrl+U -> clear current line
@@ -280,6 +294,24 @@ final class InteractiveSession {
         lines.insert(right, at: cursorRow + 1)
         cursorRow += 1
         cursorCol = 0
+    }
+
+    @MainActor private func moveWordLeft() {
+        if cursorCol == 0 {
+            if cursorRow > 0 { cursorRow -= 1; cursorCol = lines[cursorRow].count }
+            return
+        }
+        let line = lines[cursorRow]
+        cursorCol = WordNavigation.previousWordIndex(in: line, fromCol: cursorCol)
+    }
+    @MainActor private func moveWordRight() {
+        let len = lines[cursorRow].count
+        if cursorCol >= len {
+            if cursorRow + 1 < lines.count { cursorRow += 1; cursorCol = 0 }
+            return
+        }
+        let line = lines[cursorRow]
+        cursorCol = WordNavigation.nextWordIndex(in: line, fromCol: cursorCol)
     }
 
     // Render helpers for async tasks

@@ -34,7 +34,10 @@ public struct InteractiveAliasCommand: AsyncParsableCommand {
         let isTTY = (isatty(STDIN_FILENO) == 1) && (isatty(STDOUT_FILENO) == 1)
         if isTTY {
             let engine = InteractiveSession(core: session, debounceMs: max(0, debounce), colorEnabled: enableColor)
-            try await engine.start()
+            let last = try await engine.start()
+            if !last.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                print(last)
+            }
         } else {
             try runNonTTY(core: session)
         }
@@ -67,4 +70,3 @@ public struct InteractiveAliasCommand: AsyncParsableCommand {
         throw ValidationError("No .xcodeproj found in current directory. Pass with --project.")
     }
 }
-
