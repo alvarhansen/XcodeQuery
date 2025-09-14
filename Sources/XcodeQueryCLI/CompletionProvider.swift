@@ -6,10 +6,12 @@ struct CompletionProvider {
 
     private let schema: XQSchema
     private let typesByName: [String: XQObjectType]
+    private let inputsByName: [String: XQInputObjectType]
 
     init(schema: XQSchema = XcodeQuerySchema.schema) {
         self.schema = schema
         self.typesByName = Dictionary(uniqueKeysWithValues: schema.types.map { ($0.name, $0) })
+        self.inputsByName = Dictionary(uniqueKeysWithValues: schema.inputs.map { ($0.name, $0) })
     }
 
     func suggest(lines: [String], row: Int, col: Int) -> Suggestions? {
@@ -37,13 +39,26 @@ struct CompletionProvider {
                 // Argument name suggestions (exclude used)
                 items = field.args.map { $0.name }.filter { !used.contains($0) && $0.hasPrefix(prefix) }
             }
+        case .inputKeys(let input):
+            let used = input.usedKeys
+            items = input.fields.map { $0.name }.filter { !used.contains($0) && $0.hasPrefix(prefix) }
+        case .inputEnumValue(let enumName):
+            if let en = schema.enums.first(where: { $0.name == enumName }) {
+                items = en.cases.filter { $0.hasPrefix(prefix.uppercased()) }
+            } else { items = [] }
         }
         if items.isEmpty { return nil }
         return Suggestions(items: items, replaceStartCol: startCol, replaceEndCol: endCol)
     }
 
     // MARK: - Context scanning
-    private enum Mode { case root, selection(String), arguments(String, XQField, currentArgName: String?, used: Set<String>) }
+    private enum Mode {
+        case root
+        case selection(String)
+        case arguments(String, XQField, currentArgName: String?, used: Set<String>)
+        case inputKeys(InputFrameSummary)
+        case inputEnumValue(String)
+    }
     private struct Ctx { var mode: Mode }
 
     private func scanContext(lines: [String], row: Int, col: Int) -> Ctx {
@@ -85,10 +100,12 @@ struct CompletionProvider {
 
         let rootType = "Query"
         var typeStack: [String] = [rootType]
-        struct ArgFrame { let typeName: String; let field: XQField; var usedArgs: Set<String> }
+        struct ArgFrame { let typeName: String; let field: XQField; var usedArgs: Set<String>; var lastColonArgName: String? }
         var argStack: [ArgFrame] = []
+        struct InputFrame { let inputName: String; let fields: [XQArgument]; var usedKeys: Set<String>; var lastColonKey: String? }
+        var inputStack: [InputFrame] = []
         var lastIdent: String? = nil
-        var lastColonArgName: String? = nil
+        var lastFieldName: String? = nil // last identifier that is a field on current type
 
         func findField(typeName: String, name: String) -> XQField? {
             if typeName == rootType { return schema.topLevel.first(where: { $0.name == name }) }
@@ -100,6 +117,16 @@ struct CompletionProvider {
             case .list(let of, _, _): return underlyingObject(of)
             }
         }
+        func underlyingInput(_ t: XQSTypeRef) -> XQInputObjectType? {
+            switch t {
+            case .named(let name, _): return inputsByName[name]
+            case .list(let of, _, _): return underlyingInput(of)
+            }
+        }
+
+        func findArg(in typeName: String, field: XQField, name: String) -> XQArgument? {
+            field.args.first(where: { $0.name == name })
+        }
 
         // Walk all lines up to the target row/col
         for r in 0...row {
@@ -110,41 +137,78 @@ struct CompletionProvider {
                 switch t {
                 case .ident(let s):
                     lastIdent = s
+                    if let currentType = typeStack.last, let _ = findField(typeName: currentType, name: s) {
+                        lastFieldName = s
+                    }
                 case .lparen:
                     if let name = lastIdent, let f = findField(typeName: typeStack.last ?? rootType, name: name) {
-                        argStack.append(ArgFrame(typeName: typeStack.last ?? rootType, field: f, usedArgs: []))
-                        lastColonArgName = nil
+                        argStack.append(ArgFrame(typeName: typeStack.last ?? rootType, field: f, usedArgs: [], lastColonArgName: nil))
                     }
                 case .rparen:
-                    _ = argStack.popLast(); lastColonArgName = nil
+                    _ = argStack.popLast()
                 case .lbrace:
-                    if let name = lastIdent, let f = findField(typeName: typeStack.last ?? rootType, name: name), let obj = underlyingObject(f.type) {
-                        typeStack.append(obj)
+                    if !argStack.isEmpty {
+                        // First, handle nested input objects inside an existing input frame
+                        if var topInput = inputStack.popLast() {
+                            if let key = topInput.lastColonKey, let fieldArg = topInput.fields.first(where: { $0.name == key }), let nextInput = underlyingInput(fieldArg.type) {
+                                inputStack.append(topInput) // restore before push
+                                inputStack.append(InputFrame(inputName: nextInput.name, fields: nextInput.fields, usedKeys: [], lastColonKey: nil))
+                                break
+                            }
+                            inputStack.append(topInput)
+                        }
+                        // Otherwise, opening input object for an argument (e.g., filter: { ... })
+                        if var top = argStack.popLast() {
+                            if let argName = top.lastColonArgName, let arg = findArg(in: top.typeName, field: top.field, name: argName), let input = underlyingInput(arg.type) {
+                                inputStack.append(InputFrame(inputName: input.name, fields: input.fields, usedKeys: [], lastColonKey: nil))
+                                top.lastColonArgName = nil
+                            }
+                            argStack.append(top)
+                        }
+                    } else {
+                        let candidate = lastFieldName ?? lastIdent
+                        if let name = candidate, let f = findField(typeName: typeStack.last ?? rootType, name: name), let obj = underlyingObject(f.type) {
+                            typeStack.append(obj)
+                        }
                     }
                 case .rbrace:
-                    if typeStack.count > 1 { _ = typeStack.popLast() }
+                    if !inputStack.isEmpty { _ = inputStack.popLast() }
+                    else if typeStack.count > 1 { _ = typeStack.popLast() }
                 case .colon:
-                    if let name = lastIdent, var top = argStack.popLast() {
-                        top.usedArgs.insert(name)
+                    if var inputTop = inputStack.popLast() {
+                        if let key = lastIdent { inputTop.usedKeys.insert(key); inputTop.lastColonKey = key }
+                        inputStack.append(inputTop)
+                    } else if var top = argStack.popLast() {
+                        if let name = lastIdent { top.usedArgs.insert(name); top.lastColonArgName = name }
                         argStack.append(top)
-                        lastColonArgName = name
                     }
                 case .comma:
-                    lastColonArgName = nil
+                    if var inputTop = inputStack.popLast() { inputTop.lastColonKey = nil; inputStack.append(inputTop) }
+                    if var top = argStack.popLast() { top.lastColonArgName = nil; argStack.append(top) }
                 case .string:
                     break
                 }
             }
         }
 
+        if let inputTop = inputStack.last {
+            if let key = inputTop.lastColonKey, let fieldArg = inputTop.fields.first(where: { $0.name == key }) {
+                if case let .named(enumName, _) = fieldArg.type, schema.enums.contains(where: { $0.name == enumName }) {
+                    return Ctx(mode: .inputEnumValue(enumName))
+                }
+            }
+            return Ctx(mode: .inputKeys(InputFrameSummary(inputName: inputTop.inputName, fields: inputTop.fields, usedKeys: inputTop.usedKeys)))
+        }
         if let top = argStack.last {
-            return Ctx(mode: .arguments(top.typeName, top.field, currentArgName: lastColonArgName, used: top.usedArgs))
+            return Ctx(mode: .arguments(top.typeName, top.field, currentArgName: top.lastColonArgName, used: top.usedArgs))
         }
         if let typeName = typeStack.last, typeName != rootType {
             return Ctx(mode: .selection(typeName))
         }
         return Ctx(mode: .root)
     }
+
+    private struct InputFrameSummary { let inputName: String; let fields: [XQArgument]; let usedKeys: Set<String> }
 
     // Find current identifier under cursor and its replace range
     private func currentWord(in line: String, col: Int) -> (String, Int, Int) {
@@ -162,4 +226,3 @@ struct CompletionProvider {
         return (prefix, left, right)
     }
 }
-

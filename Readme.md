@@ -28,6 +28,20 @@ After install, verify: `xcq --help`
   - In non-TTY environments (e.g., piped input), reads line-by-line from stdin and prints pretty JSON.
 - Output is always pretty-printed JSON in interactive mode.
 
+#### Completions
+
+- Press Tab to show context-aware suggestions; Tab again hides the panel.
+- Up/Down navigates; Enter/Right accepts the selected suggestion; ESC exits interactive mode.
+- Supported contexts (driven by the built-in schema):
+  - Top-level fields at root, object fields inside selections, and argument names inside `(...)`.
+  - Enum values for enum-typed arguments (e.g., `TargetType`, `ScriptStage`).
+  - Filter keys inside inputs: `TargetFilter` (`name`, `type`), `SourceFilter`/`ResourceFilter` (`path`, `target`), `BuildScriptFilter` (`stage`, `name`, `target`).
+  - Nested `StringMatch` keys: `eq`, `regex`, `prefix`, `suffix`, `contains`.
+- Examples (position cursor at `•` and press Tab):
+  - `targets(filter: { • }) { name }` → `name`, `type`
+  - `targets(filter: { type: • }) { name }` → `APP`, `FRAMEWORK`, …
+  - `targetResources(filter: { path: { • } }) { target path }` → `eq`, `regex`, `prefix`, `suffix`, `contains`
+
 ## Schema Overview
 
 Top-level fields (selection required):
