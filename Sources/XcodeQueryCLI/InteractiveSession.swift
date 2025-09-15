@@ -30,6 +30,7 @@ final class InteractiveSession {
     private var evalTask: Task<Void, Never>? = nil
     private var revision: UInt64 = 0
     private let prompt = "> "
+    private let indentWidth = SmartEditing.indentWidth
 
     // Terminal state
     private var origTerm = termios()
@@ -115,9 +116,22 @@ final class InteractiveSession {
         revision &+= 1
         let myRev = revision
         let current = lines.joined(separator: "\n")
-        let delay = immediate ? 0 : debounceMs
         let coreBox = UncheckedSendable(self.core)
         let selfBox = WeakBox(self)
+        // Gate evaluation on balance
+        let bal = SmartEditing.computeBalance(current)
+        if !bal.balanced {
+            let deficit = abs(bal.depthCurlies) + abs(bal.depthParens)
+            let base = "Unbalanced (\(deficit))"
+            Task { @MainActor in
+                if let strong = selfBox.value {
+                    let msg = strong.colorize(base, color: .dim)
+                    strong.render(preview: msg)
+                }
+            }
+            return
+        }
+        let delay = immediate ? 0 : debounceMs
         evalTask = Task.detached {
             if delay > 0 {
                 try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000)
@@ -271,10 +285,20 @@ final class InteractiveSession {
     @MainActor private func handleBackspace() {
         if cursorCol > 0 {
             var line = lines[cursorRow]
-            let idx = line.index(line.startIndex, offsetBy: cursorCol - 1)
-            line.remove(at: idx)
-            lines[cursorRow] = line
-            cursorCol -= 1
+            // Smart backspace in leading spaces
+            let newCol = SmartEditing.smartBackspaceColumn(for: line, col: cursorCol, indentWidth: indentWidth)
+            if newCol < cursorCol && String(line.prefix(cursorCol)).allSatisfy({ $0 == " " }) {
+                let start = line.index(line.startIndex, offsetBy: newCol)
+                let end = line.index(line.startIndex, offsetBy: cursorCol)
+                line.replaceSubrange(start..<end, with: "")
+                lines[cursorRow] = line
+                cursorCol = newCol
+            } else {
+                let idx = line.index(line.startIndex, offsetBy: cursorCol - 1)
+                line.remove(at: idx)
+                lines[cursorRow] = line
+                cursorCol -= 1
+            }
             scheduleEval(); render()
         } else if cursorRow > 0 {
             let prevLen = lines[cursorRow - 1].count
@@ -286,14 +310,26 @@ final class InteractiveSession {
         }
     }
     @MainActor private func insertNewline() {
+        // Try smart block expansion first
+        let exp = SmartEditing.expandBlockOnEnter(lines: lines, row: cursorRow, col: cursorCol, indentWidth: indentWidth)
+        if exp.applied {
+            lines = exp.newLines
+            cursorRow = exp.cursorRow
+            cursorCol = exp.cursorCol
+            return
+        }
+
+        // Default: split line and indent next line
         let line = lines[cursorRow]
         let splitIdx = line.index(line.startIndex, offsetBy: cursorCol)
         let left = String(line[..<splitIdx])
         let right = String(line[splitIdx...])
+        let indent = SmartEditing.computeIndentForNewLine(lines: lines, beforeRow: cursorRow, col: cursorCol, indentWidth: indentWidth)
         lines[cursorRow] = left
-        lines.insert(right, at: cursorRow + 1)
+        let newLine = String(repeating: " ", count: indent) + right
+        lines.insert(newLine, at: cursorRow + 1)
         cursorRow += 1
-        cursorCol = 0
+        cursorCol = indent
     }
 
     @MainActor private func moveWordLeft() {
@@ -322,8 +358,24 @@ final class InteractiveSession {
     @MainActor
     private func renderErrorIfLatest(_ error: any Error, myRev: UInt64) {
         if myRev != revision { return }
-        let msg = String(describing: error)
-        render(preview: colorize(msg, color: .red))
+        let current = lines.joined(separator: "\n")
+        var header = String(describing: error)
+        var caret: String? = nil
+        if let gql = error as? GQLError {
+            switch gql {
+            case .parseAt(let position, let message):
+                header = "Parse error: \(message)"
+                let (row, col) = SmartEditing.mapPosition(current, position: position)
+                let split = current.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+                let line = (row >= 0 && row < split.count) ? split[row] : ""
+                caret = SmartEditing.caretLine(for: line, col: col)
+            default:
+                break
+            }
+        }
+        var preview = colorize(header, color: .red)
+        if let c = caret { preview += "\n" + c }
+        render(preview: preview)
     }
 
     // MARK: - Terminal helpers

@@ -52,13 +52,15 @@ public enum JSONValue: Encodable, Equatable {
 
 // MARK: - GraphQL tiny parser
 
-enum GQLError: Error, CustomStringConvertible {
+public enum GQLError: Error, CustomStringConvertible {
     case parse(String)
+    case parseAt(position: Int, message: String)
     case exec(String)
 
-    var description: String {
+    public var description: String {
         switch self {
         case .parse(let m): return "Parse error: \(m)"
+        case .parseAt(let position, let message): return "Parse error: \(message) @\(position)"
         case .exec(let m): return "Execution error: \(m)"
         }
     }
@@ -101,7 +103,7 @@ final class GQLParser {
     func parseDocument() throws -> GQLSelectionSet {
         skipWS()
         if peek("{") {
-            throw GQLError.parse("Top-level braces are not supported; omit them")
+            throw GQLError.parseAt(position: i, message: "Top-level braces are not supported; omit them")
         }
         var fields: [GQLField] = []
         while !isAtEnd {
@@ -184,12 +186,12 @@ final class GQLParser {
             // treat as enum symbol or bare string
             return .enumSymbol(ident)
         }
-        throw GQLError.parse("Invalid value at position \(i)")
+        throw GQLError.parseAt(position: i, message: "Invalid value")
     }
 
     private func parseIdentifier() throws -> String {
         skipWS()
-        guard !isAtEnd else { throw GQLError.parse("Unexpected end of input") }
+        guard !isAtEnd else { throw GQLError.parseAt(position: i, message: "Unexpected end of input") }
         var start = i
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_"))
         while !isAtEnd {
@@ -198,7 +200,7 @@ final class GQLParser {
                 i += 1
             } else { break }
         }
-        guard i > start else { throw GQLError.parse("Expected identifier at position \(i)") }
+        guard i > start else { throw GQLError.parseAt(position: i, message: "Expected identifier") }
         return String(chars[start..<i])
     }
 
@@ -207,7 +209,7 @@ final class GQLParser {
         while !isAtEnd {
             let ch = chars[i]; i += 1
             if ch == "\\" { // escape
-                guard !isAtEnd else { throw GQLError.parse("Unterminated escape sequence") }
+                guard !isAtEnd else { throw GQLError.parseAt(position: i, message: "Unterminated escape sequence") }
                 let next = chars[i]; i += 1
                 switch next {
                 case "\"": out.append("\"")
@@ -222,14 +224,14 @@ final class GQLParser {
                 out.append(ch)
             }
         }
-        throw GQLError.parse("Unterminated string literal")
+        throw GQLError.parseAt(position: i, message: "Unterminated string literal")
     }
 
     // helpers
     private var isAtEnd: Bool { i >= chars.count }
     private func peek(_ s: Character) -> Bool { !isAtEnd && chars[i] == s }
     @discardableResult private func consumeIf(_ s: Character) -> Bool { if peek(s) { i += 1; return true } else { return false } }
-    private func expect(_ s: Character) throws { guard consumeIf(s) else { throw GQLError.parse("Expected '\\(s)' at position \(i)") } }
+    private func expect(_ s: Character) throws { guard consumeIf(s) else { throw GQLError.parseAt(position: i, message: "Expected '\\(s)'") } }
     private func skipWS() { while !isAtEnd && chars[i].isWhitespace { i += 1 } }
 }
 
