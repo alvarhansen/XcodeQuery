@@ -8,6 +8,7 @@
 - Tests: `Tests/XcodeQueryKitTests/` (XCTest specs for the core).
 - CI: `.github/workflows/` (release + Homebrew tap automation).
 - Packaging: `HomebrewFormula/` and `Makefile` helpers.
+- Feature specs and plans live in `Docs/`; every feature starts with a written spec and a task plan checked into the repo.
 
 ## Build, Test, and Development Commands
 - Build (debug): `make build` or `swift build -c debug`.
@@ -37,4 +38,3 @@
 ## Security & Release Notes
 - Do not commit secrets; workflows rely on `GITHUB_TOKEN` only.
 - Releases: tag `vX.Y.Z`; CI uploads macOS zip and updates the tap. If packaging changes, update `.github/workflows/*` accordingly.
-
