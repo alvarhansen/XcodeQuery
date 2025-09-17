@@ -12,6 +12,7 @@ let package = Package(
         .package(url: "https://github.com/tuist/XcodeProj.git", exact: "8.27.7"),
         .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.6.1"),
         .package(url: "https://github.com/yonaskolb/XcodeGen.git", from: "2.41.0"),
+        .package(url: "https://github.com/GraphQLSwift/GraphQL.git", from: "2.0.0"),
     ],
     targets: [
         .executableTarget(
@@ -32,6 +33,7 @@ let package = Package(
             name: "XcodeQueryKit",
             dependencies: [
                 .product(name: "XcodeProj", package: "XcodeProj"),
+                .product(name: "GraphQL", package: "GraphQL"),
             ]
         ),
         .testTarget(
