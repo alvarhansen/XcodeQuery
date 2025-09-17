@@ -70,12 +70,12 @@ enum XQGraphQLSwiftSchema {
             "path": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveResource_path)
         ])
         let buildScript = try GraphQLObjectType(name: "BuildScript", fields: [
-            "name": GraphQLField(type: string),
-            "stage": GraphQLField(type: GraphQLNonNull(scriptStage)),
-            "inputPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string)))),
-            "outputPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string)))),
-            "inputFileListPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string)))),
-            "outputFileListPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string)))),
+            "name": GraphQLField(type: string, resolve: XQResolvers.resolveBuildScript_name),
+            "stage": GraphQLField(type: GraphQLNonNull(scriptStage), resolve: XQResolvers.resolveBuildScript_stage),
+            "inputPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))), resolve: XQResolvers.resolveBuildScript_inputPaths),
+            "outputPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))), resolve: XQResolvers.resolveBuildScript_outputPaths),
+            "inputFileListPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))), resolve: XQResolvers.resolveBuildScript_inputFileListPaths),
+            "outputFileListPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))), resolve: XQResolvers.resolveBuildScript_outputFileListPaths),
         ])
 
         // Target and nested fields

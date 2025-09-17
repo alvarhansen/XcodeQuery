@@ -102,4 +102,44 @@ final class GraphQLSwiftResolverTests: XCTestCase {
         }
         XCTAssertTrue(nonEmpty, "Expected some sources when filtering by contains '.'")
     }
+
+    func testTargetsBuildScriptsPresence() throws {
+        // Arrange project via baseline fixture
+        let fixture = try GraphQLBaselineFixture()
+
+        // Obtain schema and context
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 10, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 11, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        // Query buildScripts nested under targets
+        let q = "{ targets { name buildScripts { name stage } } }"
+        let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+        if result.data == nil { XCTFail("No data: \(result.errors)"); return }
+        guard let data = result.data?.dictionary, let tarr = data["targets"]?.array else { XCTFail("No data"); return }
+
+        var counts: [String: Int] = [:]
+        for tval in tarr {
+            guard let name = tval.dictionary?["name"]?.string else { continue }
+            let scripts = tval.dictionary?["buildScripts"]?.array ?? []
+            counts[name] = scripts.count
+        }
+
+        // In our fixture: App has scripts, Lib and AppTests do not
+        XCTAssertEqual(counts["Lib"], 0)
+        XCTAssertEqual(counts["AppTests"], 0)
+        XCTAssertNotNil(counts["App"])
+        XCTAssertTrue((counts["App"] ?? 0) > 0)
+    }
 }

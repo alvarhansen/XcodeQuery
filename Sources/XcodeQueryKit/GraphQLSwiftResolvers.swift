@@ -199,7 +199,11 @@ enum XQResolvers {
         let t = try expect(source, as: GTarget.self)
         var bs = try buildScripts(targetName: t.nt.name, ctx: t.ctx)
         if let filter = args["filter"].dictionary { bs = bs.filter { matchBuildScript($0, obj: filter) } }
-        return bs.map(GBuildScript.init(bs:))
+        let wrapped = bs.map(GBuildScript.init(bs:))
+        #if DEBUG
+        fputs("[xcq-debug] resolveTarget_buildScripts: target=\(t.nt.name), count=\(wrapped.count)\n", stderr)
+        #endif
+        return wrapped
     }
 
     // MARK: Leaf object resolvers
@@ -208,6 +212,9 @@ enum XQResolvers {
     static func resolveBuildScript_name(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GBuildScript.self).bs.name }
     static func resolveBuildScript_stage(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
         let bs = try expect(source, as: GBuildScript.self).bs
+        #if DEBUG
+        fputs("[xcq-debug] resolveBuildScript_stage: target=\(bs.target), name=\(bs.name ?? "<nil>") stage=\(bs.stage == .pre ? "PRE" : "POST")\n", stderr)
+        #endif
         return (bs.stage == .pre ? "PRE" : "POST")
     }
     static func resolveBuildScript_inputPaths(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GBuildScript.self).bs.inputPaths }
