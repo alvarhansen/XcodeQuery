@@ -1,6 +1,7 @@
 import Foundation
 import ArgumentParser
 import XcodeQueryKit
+import Darwin
 
 public struct QueryCommand: AsyncParsableCommand {
     public static let configuration = CommandConfiguration(
@@ -12,10 +13,24 @@ public struct QueryCommand: AsyncParsableCommand {
 
     @Option(name: [.customShort("p"), .long], help: "Path to .xcodeproj (optional)")
     var project: String?
+
+    @Flag(name: .customLong("legacy"), help: "Use legacy parser engine instead of GraphQLSwift (temporary fallback)")
+    var legacy: Bool = false
+
+    @Flag(name: .customLong("compare-engines"), help: ArgumentHelp("Execute both engines and report mismatches (stderr)", visibility: .hidden))
+    var compareEngines: Bool = false
     
     public init() {}
     
     public func run() async throws {
+        // Default the CLI to GraphQLSwift; allow fallback via --legacy
+        if legacy {
+            setenv("XCQ_USE_LEGACY", "1", 1)
+        } else {
+            setenv("XCQ_USE_GRAPHQLSWIFT", "1", 1)
+        }
+        if compareEngines { setenv("XCQ_COMPARE_ENGINES", "1", 1) }
+
         let xc = XcodeProjectQuery(projectPath: try resolveProjectPath())
         let result = try xc.evaluate(query: query)
         
