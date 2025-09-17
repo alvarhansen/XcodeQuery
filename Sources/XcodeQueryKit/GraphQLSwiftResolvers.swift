@@ -74,8 +74,12 @@ enum XQResolvers {
         if let filter = args["filter"].dictionary {
             rows = rows.filter { row in
                 var ok = true
-                if filter["path"] != nil { ok = ok && matchString(row.path, key: "path", obj: filter) }
-                if filter["target"] != nil { ok = ok && matchString(row.target, key: "target", obj: filter) }
+                if let pathVal = filter["path"], !pathVal.isUndefined, !pathVal.isNull {
+                    ok = ok && matchString(row.path, key: "path", obj: filter)
+                }
+                if let targetVal = filter["target"], !targetVal.isUndefined, !targetVal.isNull {
+                    ok = ok && matchString(row.target, key: "target", obj: filter)
+                }
                 return ok
             }
         }
@@ -94,8 +98,12 @@ enum XQResolvers {
         if let filter = args["filter"].dictionary {
             rows = rows.filter { row in
                 var ok = true
-                if filter["path"] != nil { ok = ok && matchString(row.path, key: "path", obj: filter) }
-                if filter["target"] != nil { ok = ok && matchString(row.target, key: "target", obj: filter) }
+                if let pathVal = filter["path"], !pathVal.isUndefined, !pathVal.isNull {
+                    ok = ok && matchString(row.path, key: "path", obj: filter)
+                }
+                if let targetVal = filter["target"], !targetVal.isUndefined, !targetVal.isNull {
+                    ok = ok && matchString(row.target, key: "target", obj: filter)
+                }
                 return ok
             }
         }
@@ -178,7 +186,7 @@ enum XQResolvers {
         let mode = parsePathMode(args["pathMode"]) ?? .fileRef
         var paths = try sourceFiles(targetName: t.nt.name, mode: mode, ctx: t.ctx)
         if let filter = args["filter"].dictionary {
-            if filter["path"] != nil {
+            if let pathVal = filter["path"], !pathVal.isUndefined, !pathVal.isNull {
                 paths = paths.filter { matchString($0, key: "path", obj: filter) }
             }
         }
@@ -189,7 +197,7 @@ enum XQResolvers {
         let mode = parsePathMode(args["pathMode"]) ?? .fileRef
         var paths = try resourceFiles(targetName: t.nt.name, mode: mode, ctx: t.ctx)
         if let filter = args["filter"].dictionary {
-            if filter["path"] != nil {
+            if let pathVal = filter["path"], !pathVal.isUndefined, !pathVal.isNull {
                 paths = paths.filter { matchString($0, key: "path", obj: filter) }
             }
         }

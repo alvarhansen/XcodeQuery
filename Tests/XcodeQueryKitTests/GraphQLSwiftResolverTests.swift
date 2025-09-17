@@ -142,4 +142,89 @@ final class GraphQLSwiftResolverTests: XCTestCase {
         XCTAssertNotNil(counts["App"])
         XCTAssertTrue((counts["App"] ?? 0) > 0)
     }
+
+    func testFlatResourcesFilterContainsDot() throws {
+        // Arrange project via baseline fixture
+        let fixture = try GraphQLBaselineFixture()
+
+        // Obtain schema and context
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 20, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 21, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        // Top-level targetResources with contains "." should match resource file(s)
+        let q = "{ targetResources(filter: { path: { contains: \".\" } }) { path } }"
+        let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+        guard let data = result.data?.dictionary, let arr = data["targetResources"]?.array else { XCTFail("No data"); return }
+        XCTAssertFalse(arr.isEmpty, "Expected some targetResources when filtering by contains '.'")
+    }
+
+    func testNestedResourcesFilterContainsDot() throws {
+        // Arrange project via baseline fixture
+        let fixture = try GraphQLBaselineFixture()
+
+        // Obtain schema and context
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 30, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 31, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        // Nested resources with contains '.' should return entries for at least one target
+        let q = "{ targets { resources(filter: { path: { contains: \".\" } }) { path } } }"
+        let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+        guard let data = result.data?.dictionary, let tarr = data["targets"]?.array else { XCTFail("No data"); return }
+        let nonEmpty = tarr.contains { tval in
+            if let d = tval.dictionary, let res = d["resources"]?.array { return !res.isEmpty }
+            return false
+        }
+        XCTAssertTrue(nonEmpty, "Expected nested resources when filtering by contains '.'")
+    }
+
+    func testFlatSourcesFilterContainsDot() throws {
+        // Arrange project via baseline fixture
+        let fixture = try GraphQLBaselineFixture()
+
+        // Obtain schema and context
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 40, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 41, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        // Top-level targetSources with contains '.' should return some entries
+        let q = "{ targetSources(filter: { path: { contains: \".\" } }) { path } }"
+        let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+        guard let data = result.data?.dictionary, let arr = data["targetSources"]?.array else { XCTFail("No data"); return }
+        XCTAssertFalse(arr.isEmpty, "Expected some targetSources when filtering by contains '.'")
+    }
 }
