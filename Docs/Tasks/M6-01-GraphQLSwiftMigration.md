@@ -16,15 +16,12 @@ Requirements
 - Update documentation/tests to reflect the new dependency and verify query compatibility (additions to `Tests/XcodeQueryKitTests` as needed).
 
 Implementation Phases
-1. Inventory Schema Surface
-   - Document current query root fields, arguments, nested selections, and enum/input usages.
-   - Capture any quirks (e.g. rejection of top-level braces) to consciously handle or revise.
-2. Wire Up GraphQLSwift
-   - Add the dependency, define schema objects/enums/input types, and stand up the query root using GraphQLSwift’s APIs.
-   - Port resolver logic from `GraphQLExecutor`, adapting signatures but keeping data transformations intact.
-3. Integrate and Decommission Legacy Parser
-   - Replace calls to the old parser with the new GraphQLSwift execution pipeline while preserving the `JSONValue` output structure.
-   - Remove or retire the custom parser/AST types once tests and manual verification confirm parity.
+- Phase 0 — Baseline Fidelity Freeze ([Docs/Tasks/M6-01-Phase0-BaselineFidelity.md](M6-01-Phase0-BaselineFidelity.md)): document the existing schema surface, capture edge cases, and lock behavior with golden tests.
+- Phase 1 — GraphQLSwift Schema Definition Layer ([Docs/Tasks/M6-01-Phase1-SchemaDefinition.md](M6-01-Phase1-SchemaDefinition.md)): add the GraphQL dependency and model the schema types to mirror today’s contract.
+- Phase 2 — Resolver Adapter Layer ([Docs/Tasks/M6-01-Phase2-ResolverAdapters.md](M6-01-Phase2-ResolverAdapters.md)): bridge GraphQLSwift resolver signatures onto the current executor helpers.
+- Phase 3 — Dual Execution Harness ([Docs/Tasks/M6-01-Phase3-DualExecution.md](M6-01-Phase3-DualExecution.md)): run legacy and GraphQLSwift pipelines side-by-side behind a feature flag to validate parity and performance.
+- Phase 4 — CLI Flip and Fallback Strategy ([Docs/Tasks/M6-01-Phase4-CLISwitch.md](M6-01-Phase4-CLISwitch.md)): make GraphQLSwift the default execution path while keeping a guarded rollback lever.
+- Phase 5 — Legacy Parser Decommission ([Docs/Tasks/M6-01-Phase5-LegacyRemoval.md](M6-01-Phase5-LegacyRemoval.md)): remove the bespoke parser once GraphQLSwift has baked in production.
 
 Acceptance Criteria
 - `swift test` and `swift build` succeed with the new dependency included.
