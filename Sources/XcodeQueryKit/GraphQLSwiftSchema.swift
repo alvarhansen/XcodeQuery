@@ -64,10 +64,10 @@ enum XQGraphQLSwiftSchema {
         // MARK: Objects
         // Leaf/simple types
         let source = try GraphQLObjectType(name: "Source", fields: [
-            "path": GraphQLField(type: GraphQLNonNull(string))
+            "path": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveSource_path)
         ])
         let resource = try GraphQLObjectType(name: "Resource", fields: [
-            "path": GraphQLField(type: GraphQLNonNull(string))
+            "path": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveResource_path)
         ])
         let buildScript = try GraphQLObjectType(name: "BuildScript", fields: [
             "name": GraphQLField(type: string),
@@ -80,60 +80,61 @@ enum XQGraphQLSwiftSchema {
 
         // Target and nested fields
         let target = try GraphQLObjectType(name: "Target", fields: [
-            "name": GraphQLField(type: GraphQLNonNull(string)),
-            "type": GraphQLField(type: GraphQLNonNull(targetType)),
+            "name": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveTarget_name),
+            "type": GraphQLField(type: GraphQLNonNull(targetType), resolve: XQResolvers.resolveTarget_type),
             "dependencies": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull("Target"))),
                 args: [
                     "recursive": GraphQLArgument(type: boolean, defaultValue: Map(false)),
                     "filter": GraphQLArgument(type: targetFilter)
                 ]
-            ),
+            , resolve: XQResolvers.resolveTarget_dependencies),
             "sources": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(source))),
                 args: [
                     "pathMode": GraphQLArgument(type: pathMode, defaultValue: Map("FILE_REF")),
                     "filter": GraphQLArgument(type: sourceFilter)
                 ]
-            ),
+            , resolve: XQResolvers.resolveTarget_sources),
             "resources": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(resource))),
                 args: [
                     "pathMode": GraphQLArgument(type: pathMode, defaultValue: Map("FILE_REF")),
                     "filter": GraphQLArgument(type: resourceFilter)
                 ]
-            ),
+            , resolve: XQResolvers.resolveTarget_resources),
             "buildScripts": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(buildScript))),
-                args: ["filter": GraphQLArgument(type: buildScriptFilter)]
+                args: ["filter": GraphQLArgument(type: buildScriptFilter)],
+                resolve: XQResolvers.resolveTarget_buildScripts
             ),
         ])
 
         let targetSource = try GraphQLObjectType(name: "TargetSource", fields: [
-            "target": GraphQLField(type: GraphQLNonNull(string)),
-            "path": GraphQLField(type: GraphQLNonNull(string))
+            "target": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveFlatSource_target),
+            "path": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveFlatSource_path)
         ])
         let targetResource = try GraphQLObjectType(name: "TargetResource", fields: [
-            "target": GraphQLField(type: GraphQLNonNull(string)),
-            "path": GraphQLField(type: GraphQLNonNull(string))
+            "target": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveFlatResource_target),
+            "path": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveFlatResource_path)
         ])
         let targetDependency = try GraphQLObjectType(name: "TargetDependency", fields: [
-            "target": GraphQLField(type: GraphQLNonNull(string)),
-            "name": GraphQLField(type: GraphQLNonNull(string)),
-            "type": GraphQLField(type: GraphQLNonNull(targetType))
+            "target": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveFlatDependency_target),
+            "name": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveFlatDependency_name),
+            "type": GraphQLField(type: GraphQLNonNull(targetType), resolve: XQResolvers.resolveFlatDependency_type)
         ])
         let targetBuildScript = try GraphQLObjectType(name: "TargetBuildScript", fields: [
-            "target": GraphQLField(type: GraphQLNonNull(string)),
-            "name": GraphQLField(type: string),
-            "stage": GraphQLField(type: GraphQLNonNull(scriptStage)),
-            "inputPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string)))),
-            "outputPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string)))),
-            "inputFileListPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string)))),
-            "outputFileListPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string)))),
+            "target": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveFlatBuildScript_target),
+            "name": GraphQLField(type: string, resolve: XQResolvers.resolveFlatBuildScript_name),
+            "stage": GraphQLField(type: GraphQLNonNull(scriptStage), resolve: XQResolvers.resolveFlatBuildScript_stage),
+            "inputPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))), resolve: XQResolvers.resolveFlatBuildScript_inputPaths),
+            "outputPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))), resolve: XQResolvers.resolveFlatBuildScript_outputPaths),
+            "inputFileListPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))), resolve: XQResolvers.resolveFlatBuildScript_inputFileListPaths),
+            "outputFileListPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))), resolve: XQResolvers.resolveFlatBuildScript_outputFileListPaths),
         ])
         let targetMembership = try GraphQLObjectType(name: "TargetMembership", fields: [
-            "path": GraphQLField(type: GraphQLNonNull(string)),
-            "targets": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))))
+            "path": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveMembership_path),
+            "targets": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))), resolve: XQResolvers.resolveMembership_targets)
         ])
 
         // MARK: Query root
@@ -143,11 +144,13 @@ enum XQGraphQLSwiftSchema {
                 args: [
                     "type": GraphQLArgument(type: targetType),
                     "filter": GraphQLArgument(type: targetFilter)
-                ]
+                ],
+                resolve: XQResolvers.resolveTargets
             ),
             "target": GraphQLField(
                 type: target,
-                args: ["name": GraphQLArgument(type: GraphQLNonNull(string))]
+                args: ["name": GraphQLArgument(type: GraphQLNonNull(string))],
+                resolve: XQResolvers.resolveTarget
             ),
             "dependencies": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(target))),
@@ -155,7 +158,8 @@ enum XQGraphQLSwiftSchema {
                     "name": GraphQLArgument(type: GraphQLNonNull(string)),
                     "recursive": GraphQLArgument(type: boolean, defaultValue: Map(false)),
                     "filter": GraphQLArgument(type: targetFilter)
-                ]
+                ],
+                resolve: XQResolvers.resolveDependenciesTop(reverse: false)
             ),
             "dependents": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(target))),
@@ -163,39 +167,45 @@ enum XQGraphQLSwiftSchema {
                     "name": GraphQLArgument(type: GraphQLNonNull(string)),
                     "recursive": GraphQLArgument(type: boolean, defaultValue: Map(false)),
                     "filter": GraphQLArgument(type: targetFilter)
-                ]
+                ],
+                resolve: XQResolvers.resolveDependenciesTop(reverse: true)
             ),
             "targetSources": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(targetSource))),
                 args: [
                     "pathMode": GraphQLArgument(type: pathMode, defaultValue: Map("FILE_REF")),
                     "filter": GraphQLArgument(type: sourceFilter)
-                ]
+                ],
+                resolve: XQResolvers.resolveTargetSources
             ),
             "targetResources": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(targetResource))),
                 args: [
                     "pathMode": GraphQLArgument(type: pathMode, defaultValue: Map("FILE_REF")),
                     "filter": GraphQLArgument(type: resourceFilter)
-                ]
+                ],
+                resolve: XQResolvers.resolveTargetResources
             ),
             "targetDependencies": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(targetDependency))),
                 args: [
                     "recursive": GraphQLArgument(type: boolean, defaultValue: Map(false)),
                     "filter": GraphQLArgument(type: targetFilter)
-                ]
+                ],
+                resolve: XQResolvers.resolveTargetDependencies
             ),
             "targetBuildScripts": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(targetBuildScript))),
-                args: ["filter": GraphQLArgument(type: buildScriptFilter)]
+                args: ["filter": GraphQLArgument(type: buildScriptFilter)],
+                resolve: XQResolvers.resolveTargetBuildScripts
             ),
             "targetMembership": GraphQLField(
                 type: GraphQLNonNull(targetMembership),
                 args: [
                     "path": GraphQLArgument(type: GraphQLNonNull(string)),
                     "pathMode": GraphQLArgument(type: pathMode, defaultValue: Map("FILE_REF"))
-                ]
+                ],
+                resolve: XQResolvers.resolveTargetMembership
             ),
         ])
 
