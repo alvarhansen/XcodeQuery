@@ -1,0 +1,196 @@
+{
+  "dependencies" : [
+    {
+      "name" : "Lib",
+      "type" : "FRAMEWORK"
+    }
+  ],
+  "dependents" : [
+    {
+      "name" : "App",
+      "type" : "APP"
+    },
+    {
+      "name" : "AppTests",
+      "type" : "UNIT_TEST"
+    }
+  ],
+  "target" : {
+    "dependencies" : [
+      {
+        "name" : "Lib"
+      }
+    ],
+    "name" : "App",
+    "type" : "APP"
+  },
+  "targetBuildScripts" : [
+    {
+      "inputPaths" : [
+        "$(SRCROOT)\/Shared\/Shared.swift"
+      ],
+      "name" : "Pre Script",
+      "outputPaths" : [
+
+      ],
+      "stage" : "PRE",
+      "target" : "App"
+    },
+    {
+      "inputPaths" : [
+
+      ],
+      "name" : "Post Script",
+      "outputPaths" : [
+        "$(BUILT_PRODUCTS_DIR)\/Generated.txt"
+      ],
+      "stage" : "POST",
+      "target" : "App"
+    }
+  ],
+  "targetDependencies" : [
+    {
+      "name" : "Lib",
+      "target" : "App",
+      "type" : "FRAMEWORK"
+    },
+    {
+      "name" : "App",
+      "target" : "AppTests",
+      "type" : "APP"
+    },
+    {
+      "name" : "Lib",
+      "target" : "AppTests",
+      "type" : "FRAMEWORK"
+    }
+  ],
+  "targetMembership" : {
+    "path" : "Shared\/Shared.swift",
+    "targets" : [
+      "App",
+      "Lib"
+    ]
+  },
+  "targetResources" : [
+    {
+      "path" : "Resources\/Config.json",
+      "target" : "App"
+    },
+    {
+      "path" : "Resources\/Config.json",
+      "target" : "Lib"
+    }
+  ],
+  "targetSources" : [
+    {
+      "path" : "App\/Sources\/AppFile.swift",
+      "target" : "App"
+    },
+    {
+      "path" : "Shared\/Shared.swift",
+      "target" : "App"
+    },
+    {
+      "path" : "Lib\/Sources\/LibFile.swift",
+      "target" : "Lib"
+    },
+    {
+      "path" : "Shared\/Shared.swift",
+      "target" : "Lib"
+    }
+  ],
+  "targets" : [
+    {
+      "buildScripts" : [
+        {
+          "inputPaths" : [
+            "$(SRCROOT)\/Shared\/Shared.swift"
+          ],
+          "name" : "Pre Script",
+          "outputPaths" : [
+
+          ],
+          "stage" : "PRE"
+        },
+        {
+          "inputPaths" : [
+
+          ],
+          "name" : "Post Script",
+          "outputPaths" : [
+            "$(BUILT_PRODUCTS_DIR)\/Generated.txt"
+          ],
+          "stage" : "POST"
+        }
+      ],
+      "dependencies" : [
+        {
+          "name" : "Lib",
+          "type" : "FRAMEWORK"
+        }
+      ],
+      "name" : "App",
+      "resources" : [
+        {
+          "path" : "Config.json"
+        }
+      ],
+      "sources" : [
+        {
+          "path" : "App\/Sources\/AppFile.swift"
+        },
+        {
+          "path" : "Shared\/Shared.swift"
+        }
+      ],
+      "type" : "APP"
+    },
+    {
+      "buildScripts" : [
+
+      ],
+      "dependencies" : [
+        {
+          "name" : "App",
+          "type" : "APP"
+        },
+        {
+          "name" : "Lib",
+          "type" : "FRAMEWORK"
+        }
+      ],
+      "name" : "AppTests",
+      "resources" : [
+
+      ],
+      "sources" : [
+
+      ],
+      "type" : "UNIT_TEST"
+    },
+    {
+      "buildScripts" : [
+
+      ],
+      "dependencies" : [
+
+      ],
+      "name" : "Lib",
+      "resources" : [
+        {
+          "path" : "Config.json"
+        }
+      ],
+      "sources" : [
+        {
+          "path" : "Lib\/Sources\/LibFile.swift"
+        },
+        {
+          "path" : "Shared\/Shared.swift"
+        }
+      ],
+      "type" : "FRAMEWORK"
+    }
+  ]
+}

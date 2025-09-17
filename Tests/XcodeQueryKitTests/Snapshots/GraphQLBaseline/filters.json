@@ -1,0 +1,49 @@
+{
+  "dependencies" : [
+    {
+      "name" : "Lib",
+      "type" : "FRAMEWORK"
+    }
+  ],
+  "dependents" : [
+    {
+      "name" : "App",
+      "type" : "APP"
+    }
+  ],
+  "targetBuildScripts" : [
+    {
+      "inputPaths" : [
+        "$(SRCROOT)\/Shared\/Shared.swift"
+      ],
+      "name" : "Pre Script",
+      "stage" : "PRE",
+      "target" : "App"
+    }
+  ],
+  "targetDependencies" : [
+    {
+      "name" : "Lib",
+      "target" : "App",
+      "type" : "FRAMEWORK"
+    }
+  ],
+  "targetResources" : [
+    {
+      "path" : "Config.json",
+      "target" : "App"
+    }
+  ],
+  "targetSources" : [
+    {
+      "path" : "Shared\/Shared.swift",
+      "target" : "App"
+    }
+  ],
+  "targets" : [
+    {
+      "name" : "AppTests",
+      "type" : "UNIT_TEST"
+    }
+  ]
+}

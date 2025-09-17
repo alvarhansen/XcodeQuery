@@ -397,6 +397,11 @@ final class GraphQLExecutor {
                 return ok
             }
         }
+        // Stable ordering for snapshots: by (target, path)
+        rows.sort { (a, b) in
+            if a.target != b.target { return a.target < b.target }
+            return a.path < b.path
+        }
         guard let sel = f.selection else { throw GQLError.exec("targetSources requires selection") }
         return .array(try rows.map { row in try resolveLeafObject(["target": .string(row.target), "path": .string(row.path)], selection: sel) })
     }
@@ -416,6 +421,11 @@ final class GraphQLExecutor {
                 return ok
             }
         }
+        // Stable ordering for snapshots: by (target, path)
+        rows.sort { (a, b) in
+            if a.target != b.target { return a.target < b.target }
+            return a.path < b.path
+        }
         guard let sel = f.selection else { throw GQLError.exec("targetResources requires selection") }
         return .array(try rows.map { row in try resolveLeafObject(["target": .string(row.target), "path": .string(row.path)], selection: sel) })
     }
@@ -430,6 +440,12 @@ final class GraphQLExecutor {
         }
         if let filter = f.arguments["filter"], case let .object(o) = filter {
             rows = rows.filter { matchTargetFilter($0.dep, o) }
+        }
+        // Stable ordering for snapshots: by (target, dep.name, dep.type)
+        rows.sort { (a, b) in
+            if a.target != b.target { return a.target < b.target }
+            if a.dep.name != b.dep.name { return a.dep.name < b.dep.name }
+            return a.dep.type.gqlEnum < b.dep.type.gqlEnum
         }
         guard let sel = f.selection else { throw GQLError.exec("targetDependencies requires selection") }
         return .array(try rows.map { row in try resolveLeafObject([
@@ -447,6 +463,14 @@ final class GraphQLExecutor {
         }
         if let filter = f.arguments["filter"], case let .object(o) = filter {
             rows = rows.filter { matchBuildScript($0.bs, obj: o) }
+        }
+        // Stable ordering for snapshots: by (target, stage, name)
+        rows.sort { (a, b) in
+            if a.target != b.target { return a.target < b.target }
+            let aStage = a.bs.stage == .pre ? 0 : 1
+            let bStage = b.bs.stage == .pre ? 0 : 1
+            if aStage != bStage { return aStage < bStage }
+            return (a.bs.name ?? "") < (b.bs.name ?? "")
         }
         guard let sel = f.selection else { throw GQLError.exec("targetBuildScripts requires selection") }
         return .array(try rows.map { row in try resolveLeafObject([
