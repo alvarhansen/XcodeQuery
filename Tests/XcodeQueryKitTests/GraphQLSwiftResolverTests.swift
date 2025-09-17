@@ -69,4 +69,37 @@ final class GraphQLSwiftResolverTests: XCTestCase {
             XCTAssertEqual(deps, ["App", "Lib"])
         }
     }
+
+    func testNestedSourcesFilterContainsDot() throws {
+        // Arrange project via baseline fixture
+        let fixture = try GraphQLBaselineFixture()
+
+        // Obtain schema and run query
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+
+        // Build context from fixture
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        // Query: nested sources with contains "." should match files with extensions
+        let query = "{ targets { sources(filter: { path: { contains: \".\" } }) { path } } }"
+        let result = try graphql(schema: schema, request: query, context: ctx, eventLoopGroup: group).wait()
+        guard let data = result.data?.dictionary, let arr = data["targets"]?.array else { XCTFail("No data"); return }
+        // Ensure at least one target reports at least one source
+        let nonEmpty = arr.contains { tval in
+            if let d = tval.dictionary, let srcs = d["sources"]?.array { return !srcs.isEmpty }
+            return false
+        }
+        XCTAssertTrue(nonEmpty, "Expected some sources when filtering by contains '.'")
+    }
 }

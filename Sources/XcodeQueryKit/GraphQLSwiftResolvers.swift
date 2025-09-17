@@ -177,14 +177,22 @@ enum XQResolvers {
         let t = try expect(source, as: GTarget.self)
         let mode = parsePathMode(args["pathMode"]) ?? .fileRef
         var paths = try sourceFiles(targetName: t.nt.name, mode: mode, ctx: t.ctx)
-        if let filter = args["filter"].dictionary { paths = paths.filter { matchString($0, key: "path", obj: filter) } }
+        if let filter = args["filter"].dictionary {
+            if filter["path"] != nil {
+                paths = paths.filter { matchString($0, key: "path", obj: filter) }
+            }
+        }
         return paths.map(GSource.init(path:))
     }
     static func resolveTarget_resources(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
         let t = try expect(source, as: GTarget.self)
         let mode = parsePathMode(args["pathMode"]) ?? .fileRef
         var paths = try resourceFiles(targetName: t.nt.name, mode: mode, ctx: t.ctx)
-        if let filter = args["filter"].dictionary { paths = paths.filter { matchString($0, key: "path", obj: filter) } }
+        if let filter = args["filter"].dictionary {
+            if filter["path"] != nil {
+                paths = paths.filter { matchString($0, key: "path", obj: filter) }
+            }
+        }
         return paths.map(GResource.init(path:))
     }
     static func resolveTarget_buildScripts(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
@@ -375,6 +383,7 @@ enum XQResolvers {
         let tname = nt.name
         let ttype = TargetType.from(productType: nt.productType)
         for (k, v) in filter {
+            if v.isUndefined || v.isNull { continue }
             switch k {
             case "name": if !matchString(tname, value: v) { return false }
             case "type": if let sym = v.string, let tt = TargetType.from(enumSymbol: sym) { if tt != ttype { return false } } else { return false }
@@ -386,6 +395,7 @@ enum XQResolvers {
 
     private static func matchBuildScript(_ s: BuildScriptEntry, obj: OrderedDictionary<String, Map>) -> Bool {
         for (k, v) in obj {
+            if v.isUndefined || v.isNull { continue }
             switch k {
             case "stage": if let sym = v.string { if (s.stage == .pre ? "PRE" : "POST") != sym { return false } } else { return false }
             case "name": if !matchString(s.name ?? "", value: v) { return false }
@@ -403,13 +413,16 @@ enum XQResolvers {
     private static func matchString(_ s: String, value: Map) -> Bool {
         guard case let .dictionary(o) = value else { return false }
         for (k, v) in o {
+            // Skip undefined/null entries injected by GraphQLSwift for absent input fields
+            if v.isUndefined || v.isNull { continue }
             switch k {
-            case "eq": if v.string != s { return false }
+            case "eq": if let val = v.string { if s != val { return false } } else { return false }
             case "regex":
                 if let pat = v.string { if (try? NSRegularExpression(pattern: pat)).map({ re in re.firstMatch(in: s, range: NSRange(location: 0, length: s.utf16.count)) != nil }) != true { return false } } else { return false }
             case "prefix": if let val = v.string { if !s.hasPrefix(val) { return false } } else { return false }
             case "suffix": if let val = v.string { if !s.hasSuffix(val) { return false } } else { return false }
-            case "contains": if let val = v.string { if !s.contains(val) { return false } } else { return false }
+            case "contains":
+                if let val = v.string { if !s.contains(val) { return false } } else { return false }
             default: return false
             }
         }
