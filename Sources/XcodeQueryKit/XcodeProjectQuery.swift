@@ -1,5 +1,7 @@
 import Foundation
 import XcodeProj
+import GraphQL
+import NIO
 
 public class XcodeProjectQuery {
     public enum Error: Swift.Error { case invalidQuery(String) }
@@ -16,10 +18,45 @@ public class XcodeProjectQuery {
         guard !trimmed.hasPrefix("{") else {
             throw Error.invalidQuery("Top-level braces are not supported. Write selection only, e.g., targets { name type }")
         }
+        func envEquals(_ key: String, _ val: String) -> Bool {
+            if let cstr = getenv(key) { return String(cString: cstr) == val }
+            return false
+        }
+        let useGQLSwift = envEquals("XCQ_USE_GRAPHQLSWIFT", "1")
+        let compareEngines = envEquals("XCQ_COMPARE_ENGINES", "1")
+
+        if useGQLSwift {
+            let value = try evaluateWithGraphQLSwift(selection: trimmed)
+            return AnyEncodable(value)
+        }
+
         let proj = try XcodeProj(pathString: projectPath)
         let executor = GraphQLExecutor(project: proj, projectPath: projectPath)
-        let value = try GraphQL.parseAndExecute(query: trimmed, with: executor)
-        return AnyEncodable(value)
+        let legacy = try GraphQL.parseAndExecute(query: trimmed, with: executor)
+
+        if compareEngines {
+            if let swiftValue = try? evaluateWithGraphQLSwift(selection: trimmed) {
+                if swiftValue != legacy {
+                    // Best-effort diagnostic to stderr without breaking CLI
+                    let diag = "[xcq] GraphQL parity mismatch for selection: \(trimmed)"
+                    FileHandle.standardError.write((diag + "\n").data(using: .utf8)!)
+                }
+            }
+        }
+        return AnyEncodable(legacy)
+    }
+
+    // MARK: - GraphQLSwift execution path
+    private func evaluateWithGraphQLSwift(selection: String) throws -> JSONValue {
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let proj = try XcodeProj(pathString: projectPath)
+        let ctx = XQGQLContext(project: proj, projectPath: projectPath)
+        let request = "{" + selection + "}"
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+        let result = try graphql(schema: schema, request: request, context: ctx, eventLoopGroup: group).wait()
+        guard let data = result.data else { return .object([:]) }
+        return JSONValue(fromMap: data)
     }
 }
 
@@ -84,4 +121,29 @@ public struct AnyEncodable: Encodable {
     private let _encode: (Encoder) throws -> Void
     public init<T: Encodable>(_ wrapped: T) { self._encode = wrapped.encode }
     public func encode(to encoder: Encoder) throws { try _encode(encoder) }
+}
+
+// MARK: - Map to JSONValue bridging
+extension JSONValue {
+    init(fromMap map: Map) {
+        switch map {
+        case .undefined:
+            self = .null
+        case .null:
+            self = .null
+        case .bool(let b):
+            self = .bool(b)
+        case .number(let num):
+            self = .number(num.doubleValue)
+        case .string(let s):
+            self = .string(s)
+        case .array(let arr):
+            self = .array(arr.map { JSONValue(fromMap: $0) })
+        case .dictionary(let dict):
+            var out: [String: JSONValue] = [:]
+            out.reserveCapacity(dict.count)
+            for (k, v) in dict { out[k] = JSONValue(fromMap: v) }
+            self = .object(out)
+        }
+    }
 }
