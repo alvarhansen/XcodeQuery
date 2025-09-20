@@ -139,6 +139,10 @@ enum XQGraphQLSwiftSchema {
 
         // MARK: Query root
         let query = try GraphQLObjectType(name: "Query", fields: [
+            "buildConfigurations": GraphQLField(
+                type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))),
+                resolve: XQResolvers.resolveBuildConfigurations
+            ),
             "targets": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(target))),
                 args: [

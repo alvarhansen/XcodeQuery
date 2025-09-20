@@ -26,6 +26,21 @@ struct GMembership { let path: String; let targets: [String] }
 
 enum XQResolvers {
     // MARK: Query root
+    static func resolveBuildConfigurations(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
+        let ctx = try expectCtx(context)
+        var names = Set<String>()
+        // Project-level configurations
+        if let proj = ctx.project.pbxproj.projects.first, let list = proj.buildConfigurationList {
+            for c in list.buildConfigurations { names.insert(c.name) }
+        }
+        // Target-level configurations
+        for t in ctx.project.pbxproj.nativeTargets {
+            if let list = t.buildConfigurationList {
+                for c in list.buildConfigurations { names.insert(c.name) }
+            }
+        }
+        return Array(names).sorted()
+    }
     static func resolveTargets(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
         let ctx = try expectCtx(context)
         var list = ctx.project.pbxproj.nativeTargets
