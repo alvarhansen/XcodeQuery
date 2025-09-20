@@ -1,20 +1,35 @@
 # Release Notes
 
+## v0.1.0 — Build Settings Queries, GraphQLSwift baseline
+
+New
+- Build configurations query
+  - `buildConfigurations: [String!]!` returns unique, sorted configuration names.
+- Project build settings
+  - `projectBuildSettings(filter: { key, configuration })` returns `(configuration, key, value|values, isArray)` across all configurations by default.
+- Per-target build settings (flat)
+  - `targetBuildSettings(scope: BuildSettingsScope = TARGET_ONLY, filter: { target, configuration, key })` yields rows per `(target, configuration, key)` with `origin` indicating `PROJECT` or `TARGET`. Default includes all configurations.
+- Nested per-target build settings
+  - `target(name: ...) { buildSettings(scope: BuildSettingsScope = TARGET_ONLY, filter: { configuration, key }) { configuration key value values isArray origin } }`.
+- Enums and inputs
+  - `BuildSettingsScope { PROJECT_ONLY, TARGET_ONLY, MERGED }`, `BuildSettingOrigin { PROJECT, TARGET }`.
+  - `ProjectBuildSettingFilter`, `BuildSettingFilter` include `StringMatch` keys (`eq`, `prefix`, `suffix`, `contains`, `regex`).
+
+Improvements
+- Schema source of truth
+  - SchemaCommand renders from GraphQLSwift runtime schema via `XQSchemaBuilder`. CompletionProvider consumes the same model.
+  - Deterministic alphabetical ordering in sections.
+- GraphQLSwift execution only
+  - Legacy parser/AST/executor removed. Error messages now originate from GraphQLSwift.
+
+Docs
+- Updated schema baseline and README with new fields, filters, and examples.
+
+Migration notes
+- If tooling referenced internal legacy types (e.g., `GQLError`, `GraphQLExecutor`), migrate to `XQGraphQLSwiftSchema` and `XQResolvers`.
+- Regex arguments in queries must be properly escaped for GraphQL strings (e.g., `\"\\.swift$\"`).
+
 ## Unreleased
 
-- Schema source of truth
-  - SchemaCommand now renders from the GraphQLSwift runtime schema via an adapter (`XQSchemaBuilder`).
-  - CompletionProvider also consumes the adapter‑built schema for suggestions.
-  - Removed the static schema instance (`XcodeQuerySchema.schema`) and the `XCQ_SCHEMA_SOURCE` fallback env.
-  - Output ordering may be slightly different (deterministic alphabetical in sections).
+- 
 
-- Decommission legacy GraphQL parser and executor.
-  - Removed bespoke parser/AST/executor previously in `Sources/XcodeQueryKit/GraphQL.swift`.
-  - CLI no longer supports `--legacy` or `--compare-engines`; GraphQLSwift is the sole engine.
-  - Error messages originate from GraphQLSwift; tests adjusted to assert informative substrings.
-- Documentation
-  - Updated interactive mode and session docs to reference GraphQLSwift exclusively.
-  - Cleaned test queries and examples to use valid GraphQL string escaping for regex patterns.
-- Migration notes
-  - If any tooling referenced internal legacy types (e.g., `GQLError`, `GraphQLExecutor`), migrate to the GraphQLSwift schema and resolvers (`XQGraphQLSwiftSchema`, `XQResolvers`).
-  - For regex arguments in queries, ensure patterns are properly escaped for GraphQL strings (e.g., use `"\\.swift$"`).
