@@ -32,4 +32,7 @@ Migration notes
 ## Unreleased
 
 - 
+## v0.1.1 — Packaging
+
+- Lower Swift tools version to 6.1 for broader compatibility with environments pinned to Swift 6.1 toolchains (no functional changes).
 
