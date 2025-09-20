@@ -1,4 +1,5 @@
 import XCTest
+@testable import XcodeQueryKit
 
 final class GraphQLBaselineSnapshotsTests: XCTestCase {
     struct SnapshotCase {
@@ -56,5 +57,35 @@ final class GraphQLBaselineSnapshotsTests: XCTestCase {
                 try GraphQLSnapshot.assertSnapshot(data: json, named: testCase.name, subdirectory: "GraphQLBaseline")
             }
         }
+    }
+
+    func testAbsoluteAndBuildScriptSnapshotsMaskedRoot() throws {
+        // Build fixture
+        let fixture = try GraphQLBaselineFixture()
+        // Determine project root for masking
+        let mirror = Mirror(reflecting: fixture)
+        guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
+            XCTFail("Could not access projectQuery from fixture"); return
+        }
+        let m = Mirror(reflecting: qp)
+        guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
+            XCTFail("Failed to read projectPath"); return
+        }
+        let projectRoot = URL(fileURLWithPath: projectPath).deletingLastPathComponent().standardizedFileURL.path
+
+        // Compose query with ABSOLUTE path modes + build script filter by name/target
+        let query = """
+        targetSources(pathMode: ABSOLUTE) { target path }
+        targetResources(pathMode: ABSOLUTE) { target path }
+        targetBuildScripts(filter: { name: { prefix: \"Post\" }, target: { eq: \"App\" } }) { target name stage }
+        """
+        var json = try fixture.evaluateToCanonicalJSON(query: query)
+        // Mask project root to make snapshot stable across temp dirs (handle both raw and escaped slashes)
+        let escapedRoot = projectRoot.replacingOccurrences(of: "/", with: "\\/")
+        json = json
+            .replacingOccurrences(of: projectRoot, with: "<ROOT>")
+            .replacingOccurrences(of: escapedRoot, with: "<ROOT>")
+            .replacingOccurrences(of: "\\/", with: "/")
+        try GraphQLSnapshot.assertSnapshot(data: json, named: "absolute_and_buildscripts", subdirectory: "GraphQLBaseline")
     }
 }

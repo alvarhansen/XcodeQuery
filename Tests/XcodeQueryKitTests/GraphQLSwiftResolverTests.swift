@@ -642,6 +642,38 @@ final class GraphQLSwiftResolverTests: XCTestCase {
         }
     }
 
+    func testNestedSourcesFilterPrefixAndSuffix() throws {
+        let fixture = try GraphQLBaselineFixture()
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 180, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 181, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        // prefix: Shared/
+        do {
+            let q = "{ targets { sources(pathMode: NORMALIZED, filter: { path: { prefix: \"Shared/\" } }) { path } } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            guard let tarr = result.data?.dictionary?["targets"]?.array else { XCTFail("No data"); return }
+            let some = tarr.contains { t in (t.dictionary?["sources"]?.array ?? []).contains { ($0.dictionary?["path"]?.string ?? "").hasPrefix("Shared/") } }
+            XCTAssertTrue(some)
+        }
+        // suffix: .swift
+        do {
+            let q = "{ targets { sources(pathMode: NORMALIZED, filter: { path: { suffix: \".swift\" } }) { path } } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            guard let tarr = result.data?.dictionary?["targets"]?.array else { XCTFail("No data"); return }
+            let some = tarr.contains { t in (t.dictionary?["sources"]?.array ?? []).contains { ($0.dictionary?["path"]?.string ?? "").hasSuffix(".swift") } }
+            XCTAssertTrue(some)
+        }
+    }
+
     func testTargetDependenciesFilterByTypeAndName() throws {
         let fixture = try GraphQLBaselineFixture()
         let schema = try XQGraphQLSwiftSchema.makeSchema()

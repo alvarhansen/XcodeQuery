@@ -1,0 +1,37 @@
+{
+  "targetBuildScripts" : [
+    {
+      "name" : "Post Script",
+      "stage" : "POST",
+      "target" : "App"
+    }
+  ],
+  "targetResources" : [
+    {
+      "path" : "<ROOT>/Resources/Config.json",
+      "target" : "App"
+    },
+    {
+      "path" : "<ROOT>/Resources/Config.json",
+      "target" : "Lib"
+    }
+  ],
+  "targetSources" : [
+    {
+      "path" : "<ROOT>/App/Sources/AppFile.swift",
+      "target" : "App"
+    },
+    {
+      "path" : "<ROOT>/Shared/Shared.swift",
+      "target" : "App"
+    },
+    {
+      "path" : "<ROOT>/Lib/Sources/LibFile.swift",
+      "target" : "Lib"
+    },
+    {
+      "path" : "<ROOT>/Shared/Shared.swift",
+      "target" : "Lib"
+    }
+  ]
+}
