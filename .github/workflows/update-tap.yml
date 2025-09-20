@@ -53,36 +53,37 @@ jobs:
       - name: Update formula in tap (binary install)
         working-directory: tap
         run: |
+          set -euo pipefail
           mkdir -p Formula
-          cat > Formula/xcq.rb <<'RUBY'
-class Xcq < Formula
-  desc "Query and introspect Xcode projects from the CLI"
-  homepage "https://github.com/alvarhansen/XcodeQuery"
-  license "MIT"
-
-  url "__ASSET_URL__"
-  sha256 "__SHA__"
-  version "__VERSION__"
-
-  head "https://github.com/alvarhansen/XcodeQuery.git", branch: "main"
-
-  depends_on xcode: :build
-
-  def install
-    if build.head?
-      ENV["SWIFTPM_DISABLE_SANDBOX"] = "1"
-      system "swift", "build", "--disable-sandbox", "-c", "release"
-      bin.install ".build/release/xcq"
-    else
-      bin.install "xcq"
-    end
-  end
-
-  test do
-    system bin/"xcq", "--help"
-  end
-end
-RUBY
+          {
+            echo 'class Xcq < Formula'
+            echo '  desc "Query and introspect Xcode projects from the CLI"'
+            echo '  homepage "https://github.com/alvarhansen/XcodeQuery"'
+            echo '  license "MIT"'
+            echo ''
+            echo '  url "__ASSET_URL__"'
+            echo '  sha256 "__SHA__"'
+            echo '  version "__VERSION__"'
+            echo ''
+            echo '  head "https://github.com/alvarhansen/XcodeQuery.git", branch: "main"'
+            echo ''
+            echo '  depends_on xcode: :build'
+            echo ''
+            echo '  def install'
+            echo '    if build.head?'
+            echo '      ENV["SWIFTPM_DISABLE_SANDBOX"] = "1"'
+            echo '      system "swift", "build", "--disable-sandbox", "-c", "release"'
+            echo '      bin.install ".build/release/xcq"'
+            echo '    else'
+            echo '      bin.install "xcq"'
+            echo '    end'
+            echo '  end'
+            echo ''
+            echo '  test do'
+            echo '    system bin/"xcq", "--help"'
+            echo '  end'
+            echo 'end'
+          } > Formula/xcq.rb
           sed -i '' "s|__ASSET_URL__|${{ steps.prep.outputs.asset_url }}|g" Formula/xcq.rb
           sed -i '' "s|__SHA__|${{ steps.sha.outputs.sha }}|g" Formula/xcq.rb
           sed -i '' "s|__VERSION__|${{ steps.prep.outputs.version }}|g" Formula/xcq.rb
