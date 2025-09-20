@@ -227,4 +227,450 @@ final class GraphQLSwiftResolverTests: XCTestCase {
         guard let data = result.data?.dictionary, let arr = data["targetSources"]?.array else { XCTFail("No data"); return }
         XCTAssertFalse(arr.isEmpty, "Expected some targetSources when filtering by contains '.'")
     }
+
+    func testAbsolutePathsForFlatSourcesAndResources() throws {
+        let fixture = try GraphQLBaselineFixture()
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+
+        let (ctx, projectRoot): (XQGQLContext, String) = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 50, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 51, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            let root = URL(fileURLWithPath: projectPath).deletingLastPathComponent().standardizedFileURL.path
+            return (XQGQLContext(project: proj, projectPath: projectPath), root)
+        }()
+
+        let q = "{ targetSources(pathMode: ABSOLUTE) { path } targetResources(pathMode: ABSOLUTE) { path } }"
+        let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+        guard let data = result.data?.dictionary else { XCTFail("No data"); return }
+        if let arr = data["targetSources"]?.array {
+            XCTAssertFalse(arr.isEmpty)
+            for v in arr { if let p = v.dictionary?["path"]?.string { XCTAssertTrue(p.hasPrefix(projectRoot + "/"), "Expected absolute source path under project root") } }
+        } else { XCTFail("Missing targetSources") }
+        if let arr = data["targetResources"]?.array {
+            XCTAssertFalse(arr.isEmpty)
+            for v in arr { if let p = v.dictionary?["path"]?.string { XCTAssertTrue(p.hasPrefix(projectRoot + "/"), "Expected absolute resource path under project root") } }
+        } else { XCTFail("Missing targetResources") }
+    }
+
+    func testAbsolutePathsForNestedSourcesAndResources() throws {
+        let fixture = try GraphQLBaselineFixture()
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+
+        let (ctx, projectRoot): (XQGQLContext, String) = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 60, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 61, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            let root = URL(fileURLWithPath: projectPath).deletingLastPathComponent().standardizedFileURL.path
+            return (XQGQLContext(project: proj, projectPath: projectPath), root)
+        }()
+
+        let q = "{ targets { name sources(pathMode: ABSOLUTE) { path } resources(pathMode: ABSOLUTE) { path } } }"
+        let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+        guard let data = result.data?.dictionary, let tarr = data["targets"]?.array else { XCTFail("No data"); return }
+        var sawSource = false
+        var sawResource = false
+        for tval in tarr {
+            if let d = tval.dictionary {
+                if let srcs = d["sources"]?.array { for s in srcs { if let p = s.dictionary?["path"]?.string { XCTAssertTrue(p.hasPrefix(projectRoot + "/")); sawSource = true } } }
+                if let res = d["resources"]?.array { for r in res { if let p = r.dictionary?["path"]?.string { XCTAssertTrue(p.hasPrefix(projectRoot + "/")); sawResource = true } } }
+            }
+        }
+        XCTAssertTrue(sawSource)
+        XCTAssertTrue(sawResource)
+    }
+
+    func testRootTargetFieldAndUnknownTargetError() throws {
+        let fixture = try GraphQLBaselineFixture()
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 70, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 71, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        // Happy path
+        do {
+            let q = "{ target(name: \"App\") { name type } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            guard let data = result.data?.dictionary, let t = data["target"]?.dictionary else { XCTFail("No data"); return }
+            XCTAssertEqual(t["name"]?.string, "App")
+            XCTAssertEqual(t["type"]?.string, "APP")
+        }
+        // Unknown target -> error (GraphQL returns null field with errors)
+        do {
+            let q = "{ target(name: \"Nope\") { name } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            XCTAssertFalse(result.errors.isEmpty)
+            let d = result.data?.dictionary
+            XCTAssertNotNil(d)
+            XCTAssertEqual(d?["target"], .null)
+        }
+    }
+
+    func testRootDependenciesAndDependents() throws {
+        let fixture = try GraphQLBaselineFixture()
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 80, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 81, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        let q = "{ dependencies(name: \"App\", recursive: true) { name } dependents(name: \"Lib\", recursive: true) { name } }"
+        let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+        guard let data = result.data?.dictionary else { XCTFail("No data"); return }
+        if let deps = data["dependencies"]?.array {
+            let names = Set(deps.compactMap { $0.dictionary?["name"]?.string })
+            XCTAssertEqual(names, ["Lib"])
+        } else { XCTFail("Missing dependencies") }
+        if let dnts = data["dependents"]?.array {
+            let names = Set(dnts.compactMap { $0.dictionary?["name"]?.string })
+            XCTAssertTrue(names.isSuperset(of: ["App", "AppTests"]))
+        } else { XCTFail("Missing dependents") }
+    }
+
+    func testRootTargetDependenciesAndBuildScriptsFilters() throws {
+        let fixture = try GraphQLBaselineFixture()
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 90, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 91, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        // targetDependencies(recursive: true)
+        do {
+            let q = "{ targetDependencies(recursive: true) { target name } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            guard let arr = result.data?.dictionary?["targetDependencies"]?.array else { XCTFail("No data"); return }
+            let hasAppLib = arr.contains { v in
+                if let d = v.dictionary { return d["target"]?.string == "App" && d["name"]?.string == "Lib" }
+                return false
+            }
+            let hasTestsApp = arr.contains { v in
+                if let d = v.dictionary { return d["target"]?.string == "AppTests" && d["name"]?.string == "App" }
+                return false
+            }
+            XCTAssertTrue(hasAppLib)
+            XCTAssertTrue(hasTestsApp)
+        }
+
+        // targetBuildScripts filter: POST and name prefix
+        do {
+            let q = "{ targetBuildScripts(filter: { stage: POST }) { target name stage } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            guard let arr = result.data?.dictionary?["targetBuildScripts"]?.array else { XCTFail("No data"); return }
+            let hasPost = arr.contains { v in v.dictionary?["target"]?.string == "App" && v.dictionary?["stage"]?.string == "POST" }
+            XCTAssertTrue(hasPost)
+        }
+        do {
+            let q = "{ targetBuildScripts(filter: { name: { prefix: \"Post\" } }) { target name } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            guard let arr = result.data?.dictionary?["targetBuildScripts"]?.array else { XCTFail("No data"); return }
+            let hasByName = arr.contains { v in
+                if let d = v.dictionary { return d["target"]?.string == "App" && (d["name"]?.string ?? "").hasPrefix("Post") }
+                return false
+            }
+            XCTAssertTrue(hasByName)
+        }
+    }
+
+    func testRootTargetMembershipFileRefAndAbsolute() throws {
+        let fixture = try GraphQLBaselineFixture()
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+        let (ctx, projectRoot): (XQGQLContext, String) = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 100, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
+                throw NSError(domain: "GraphQLSwiftResolverTests", code: 101, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            let root = URL(fileURLWithPath: projectPath).deletingLastPathComponent().standardizedFileURL.path
+            return (XQGQLContext(project: proj, projectPath: projectPath), root)
+        }()
+
+        // FILE_REF default (fileRef of Shared is just "Shared.swift")
+        do {
+            let q = "{ targetMembership(path: \"Shared.swift\") { path targets } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            guard let obj = result.data?.dictionary?["targetMembership"]?.dictionary else { XCTFail("No data"); return }
+            let ts = Set(obj["targets"]?.array?.compactMap { $0.string } ?? [])
+            XCTAssertEqual(ts, ["App", "Lib"])
+        }
+        // ABSOLUTE
+        do {
+            let abs = URL(fileURLWithPath: projectRoot).appendingPathComponent("Shared/Shared.swift").standardizedFileURL.path
+            let q = "{ targetMembership(path: \"\(abs)\", pathMode: ABSOLUTE) { path targets } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            guard let obj = result.data?.dictionary?["targetMembership"]?.dictionary else { XCTFail("No data"); return }
+            let ts = Set(obj["targets"]?.array?.compactMap { $0.string } ?? [])
+            XCTAssertEqual(ts, ["App", "Lib"])
+        }
+    }
+
+    func testTargetsNameStringMatchOperators() throws {
+        let fixture = try GraphQLBaselineFixture()
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 110, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 111, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        // eq
+        do {
+            let q = "{ targets(filter: { name: { eq: \"App\" } }) { name } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            let names = Set(result.data?.dictionary?["targets"]?.array?.compactMap { $0.dictionary?["name"]?.string } ?? [])
+            XCTAssertEqual(names, ["App"])
+        }
+        // prefix
+        do {
+            let q = "{ targets(filter: { name: { prefix: \"App\" } }) { name } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            let names = Set(result.data?.dictionary?["targets"]?.array?.compactMap { $0.dictionary?["name"]?.string } ?? [])
+            XCTAssertTrue(names.isSuperset(of: ["App", "AppTests"]))
+        }
+        // suffix
+        do {
+            let q = "{ targets(filter: { name: { suffix: \"Tests\" } }) { name } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            let names = Set(result.data?.dictionary?["targets"]?.array?.compactMap { $0.dictionary?["name"]?.string } ?? [])
+            XCTAssertEqual(names, ["AppTests"])
+        }
+        // contains
+        do {
+            let q = "{ targets(filter: { name: { contains: \"pp\" } }) { name } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            let names = Set(result.data?.dictionary?["targets"]?.array?.compactMap { $0.dictionary?["name"]?.string } ?? [])
+            XCTAssertTrue(names.isSuperset(of: ["App", "AppTests"]))
+        }
+    }
+
+    func testFlatSourcesFilterByTargetAndRegex() throws {
+        let fixture = try GraphQLBaselineFixture()
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 120, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 121, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        let q = #"{ targetSources(pathMode: NORMALIZED, filter: { target: { eq: "App" }, path: { regex: "\\.swift$" } }) { target path } }"#
+        let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+        let arr = result.data?.dictionary?["targetSources"]?.array ?? []
+        XCTAssertFalse(arr.isEmpty)
+        for v in arr {
+            let d = v.dictionary ?? [:]
+            XCTAssertEqual(d["target"]?.string, "App")
+            XCTAssertTrue(d["path"]?.string?.hasSuffix(".swift") ?? false)
+        }
+    }
+
+    func testFlatResourcesFilterRegexAndTargetEq() throws {
+        let fixture = try GraphQLBaselineFixture()
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 130, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 131, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        let q = #"{ targetResources(filter: { path: { regex: "json$" }, target: { eq: "App" } }) { target path } }"#
+        let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+        let arr = result.data?.dictionary?["targetResources"]?.array ?? []
+        XCTAssertFalse(arr.isEmpty)
+        for v in arr {
+            let d = v.dictionary ?? [:]
+            XCTAssertEqual(d["target"]?.string, "App")
+            XCTAssertTrue(d["path"]?.string?.hasSuffix("json") ?? false)
+        }
+    }
+
+    func testBuildScriptsFilterByNameAndTarget() throws {
+        let fixture = try GraphQLBaselineFixture()
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 140, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 141, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        // Name contains
+        do {
+            let q = "{ targetBuildScripts(filter: { name: { contains: \"Pre\" }, target: { eq: \"App\" } }) { target name stage } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            let arr = result.data?.dictionary?["targetBuildScripts"]?.array ?? []
+            XCTAssertTrue(arr.contains { $0.dictionary?["name"]?.string == "Pre Script" && $0.dictionary?["target"]?.string == "App" })
+        }
+        // Name eq and stage PRE
+        do {
+            let q = "{ targetBuildScripts(filter: { name: { eq: \"Pre Script\" }, target: { eq: \"App\" }, stage: PRE }) { target name stage } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            let arr = result.data?.dictionary?["targetBuildScripts"]?.array ?? []
+            XCTAssertEqual(arr.count, 1)
+            let d = arr.first?.dictionary ?? [:]
+            XCTAssertEqual(d["name"]?.string, "Pre Script")
+            XCTAssertEqual(d["target"]?.string, "App")
+            XCTAssertEqual(d["stage"]?.string, "PRE")
+        }
+    }
+
+    func testNestedSourcesFilterEqWithNormalizedPath() throws {
+        let fixture = try GraphQLBaselineFixture()
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 150, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 151, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        let q = "{ targets { name sources(pathMode: NORMALIZED, filter: { path: { eq: \"Shared/Shared.swift\" } }) { path } } }"
+        let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+        guard let tarr = result.data?.dictionary?["targets"]?.array else { XCTFail("No data"); return }
+        var libOrAppNonEmpty = false
+        var testsEmpty = false
+        for t in tarr {
+            guard let d = t.dictionary, let name = d["name"]?.string, let arr = d["sources"]?.array else { continue }
+            if name == "Lib" || name == "App" { libOrAppNonEmpty = libOrAppNonEmpty || !arr.isEmpty }
+            if name == "AppTests" { testsEmpty = arr.isEmpty }
+            for s in arr { XCTAssertEqual(s.dictionary?["path"]?.string, "Shared/Shared.swift") }
+        }
+        XCTAssertTrue(libOrAppNonEmpty)
+        XCTAssertTrue(testsEmpty)
+    }
+
+    func testNestedResourcesFilterSuffixAndRegex() throws {
+        let fixture = try GraphQLBaselineFixture()
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 160, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 161, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        // suffix: json
+        do {
+            let q = "{ targets { resources(filter: { path: { suffix: \"json\" } }) { path } } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            guard let tarr = result.data?.dictionary?["targets"]?.array else { XCTFail("No data"); return }
+            let some = tarr.contains { t in
+                (t.dictionary?["resources"]?.array ?? []).contains { ($0.dictionary?["path"]?.string ?? "").hasSuffix("json") }
+            }
+            XCTAssertTrue(some)
+            // Validate all returned entries end with json
+            for t in tarr {
+                for r in t.dictionary?["resources"]?.array ?? [] { XCTAssertTrue(r.dictionary?["path"]?.string?.hasSuffix("json") ?? false) }
+            }
+        }
+        // regex: json$
+        do {
+            let q = #"{ targets { resources(filter: { path: { regex: "json$" } }) { path } } }"#
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            guard let tarr = result.data?.dictionary?["targets"]?.array else { XCTFail("No data"); return }
+            let some = tarr.contains { t in
+                (t.dictionary?["resources"]?.array ?? []).contains { ($0.dictionary?["path"]?.string ?? "").hasSuffix("json") }
+            }
+            XCTAssertTrue(some)
+        }
+    }
+
+    func testTargetDependenciesFilterByTypeAndName() throws {
+        let fixture = try GraphQLBaselineFixture()
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 170, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 171, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        // Filter by type FRAMEWORK -> should include App->Lib
+        do {
+            let q = "{ targetDependencies(filter: { type: FRAMEWORK }) { target name type } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            let arr = result.data?.dictionary?["targetDependencies"]?.array ?? []
+            XCTAssertTrue(arr.contains { v in v.dictionary?["target"]?.string == "App" && v.dictionary?["name"]?.string == "Lib" && v.dictionary?["type"]?.string == "FRAMEWORK" })
+            // Ensure all returned types are FRAMEWORK
+            for v in arr { XCTAssertEqual(v.dictionary?["type"]?.string, "FRAMEWORK") }
+        }
+        // Filter by name eq -> should include AppTests->App
+        do {
+            let q = "{ targetDependencies(filter: { name: { eq: \"App\" } }) { target name } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            let arr = result.data?.dictionary?["targetDependencies"]?.array ?? []
+            XCTAssertTrue(arr.contains { v in v.dictionary?["target"]?.string == "AppTests" && v.dictionary?["name"]?.string == "App" })
+        }
+    }
 }
