@@ -71,7 +71,7 @@ struct GraphQLBaselineFixture {
             postBuildScripts: []
         )
 
-        let appTarget = Target(
+        var appTarget = Target(
             name: "App",
             type: .application,
             platform: .iOS,
@@ -96,6 +96,11 @@ struct GraphQLBaselineFixture {
             ],
             postBuildScripts: []
         )
+        // Add some target-level settings to exercise targetBuildSettings
+        appTarget.settings = Settings(dictionary: [
+            "SWIFT_VERSION": "5.10",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": ["DEBUG", "APP_CUSTOM"]
+        ])
 
         let testsTarget = Target(
             name: "AppTests",

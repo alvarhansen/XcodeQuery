@@ -34,6 +34,16 @@ enum XQGraphQLSwiftSchema {
             "PRE": GraphQLEnumValue(value: Map("PRE")),
             "POST": GraphQLEnumValue(value: Map("POST")),
         ])
+        // Build settings enums
+        let buildSettingsScope = try GraphQLEnumType(name: "BuildSettingsScope", values: [
+            "PROJECT_ONLY": GraphQLEnumValue(value: Map("PROJECT_ONLY")),
+            "TARGET_ONLY": GraphQLEnumValue(value: Map("TARGET_ONLY")),
+            "MERGED": GraphQLEnumValue(value: Map("MERGED")),
+        ])
+        let buildSettingOrigin = try GraphQLEnumType(name: "BuildSettingOrigin", values: [
+            "PROJECT": GraphQLEnumValue(value: Map("PROJECT")),
+            "TARGET": GraphQLEnumValue(value: Map("TARGET")),
+        ])
 
         // MARK: Inputs
         let stringMatch = try GraphQLInputObjectType(name: "StringMatch", fields: [
@@ -142,12 +152,26 @@ enum XQGraphQLSwiftSchema {
             "key": InputObjectField(type: stringMatch),
             "configuration": InputObjectField(type: stringMatch),
         ])
+        let buildSettingFilter = try GraphQLInputObjectType(name: "BuildSettingFilter", fields: [
+            "key": InputObjectField(type: stringMatch),
+            "configuration": InputObjectField(type: stringMatch),
+            "target": InputObjectField(type: stringMatch),
+        ])
         let projectBuildSetting = try GraphQLObjectType(name: "ProjectBuildSetting", fields: [
             "configuration": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveProjectBuildSetting_configuration),
             "key": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveProjectBuildSetting_key),
             "value": GraphQLField(type: string, resolve: XQResolvers.resolveProjectBuildSetting_value),
             "values": GraphQLField(type: GraphQLList(GraphQLNonNull(string)), resolve: XQResolvers.resolveProjectBuildSetting_values),
             "isArray": GraphQLField(type: GraphQLNonNull(boolean), resolve: XQResolvers.resolveProjectBuildSetting_isArray),
+        ])
+        let targetBuildSetting = try GraphQLObjectType(name: "TargetBuildSetting", fields: [
+            "target": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveTargetBuildSetting_target),
+            "configuration": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveTargetBuildSetting_configuration),
+            "key": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveTargetBuildSetting_key),
+            "value": GraphQLField(type: string, resolve: XQResolvers.resolveTargetBuildSetting_value),
+            "values": GraphQLField(type: GraphQLList(GraphQLNonNull(string)), resolve: XQResolvers.resolveTargetBuildSetting_values),
+            "isArray": GraphQLField(type: GraphQLNonNull(boolean), resolve: XQResolvers.resolveTargetBuildSetting_isArray),
+            "origin": GraphQLField(type: GraphQLNonNull(buildSettingOrigin), resolve: XQResolvers.resolveTargetBuildSetting_origin),
         ])
 
         // MARK: Query root
@@ -162,6 +186,14 @@ enum XQGraphQLSwiftSchema {
                     "filter": GraphQLArgument(type: projectBuildSettingFilter)
                 ],
                 resolve: XQResolvers.resolveProjectBuildSettings
+            ),
+            "targetBuildSettings": GraphQLField(
+                type: GraphQLNonNull(GraphQLList(GraphQLNonNull(targetBuildSetting))),
+                args: [
+                    "scope": GraphQLArgument(type: buildSettingsScope, defaultValue: Map("TARGET_ONLY")),
+                    "filter": GraphQLArgument(type: buildSettingFilter)
+                ],
+                resolve: XQResolvers.resolveTargetBuildSettings
             ),
             "targets": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(target))),

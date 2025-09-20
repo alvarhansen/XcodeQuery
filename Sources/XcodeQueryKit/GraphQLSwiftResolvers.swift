@@ -22,6 +22,7 @@ struct GFlatDependency { let target: String; let dep: PBXNativeTarget }
 struct GFlatBuildScript { let target: String; let bs: BuildScriptEntry }
 struct GMembership { let path: String; let targets: [String] }
 struct GProjectBuildSetting { let configuration: String; let key: String; let value: String?; let values: [String]?; let isArray: Bool }
+struct GTargetBuildSetting { let target: String; let configuration: String; let key: String; let value: String?; let values: [String]?; let isArray: Bool; let origin: String }
 
 // MARK: - Resolvers
 
@@ -302,6 +303,15 @@ enum XQResolvers {
     static func resolveProjectBuildSetting_values(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GProjectBuildSetting.self).values }
     static func resolveProjectBuildSetting_isArray(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GProjectBuildSetting.self).isArray }
 
+    // MARK: TargetBuildSetting leaf resolvers
+    static func resolveTargetBuildSetting_target(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GTargetBuildSetting.self).target }
+    static func resolveTargetBuildSetting_configuration(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GTargetBuildSetting.self).configuration }
+    static func resolveTargetBuildSetting_key(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GTargetBuildSetting.self).key }
+    static func resolveTargetBuildSetting_value(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GTargetBuildSetting.self).value }
+    static func resolveTargetBuildSetting_values(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GTargetBuildSetting.self).values }
+    static func resolveTargetBuildSetting_isArray(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GTargetBuildSetting.self).isArray }
+    static func resolveTargetBuildSetting_origin(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GTargetBuildSetting.self).origin }
+
     // MARK: Helpers: context, casting
     private static func expectCtx(_ any: Any) throws -> XQGQLContext {
         guard let ctx = any as? XQGQLContext else { throw GraphQLError(message: "Missing execution context") }
@@ -333,6 +343,14 @@ enum XQResolvers {
 
     private static func matchPBSFilter(configuration: String, key: String, filter: OrderedDictionary<String, Map>) -> Bool {
         var ok = true
+        if let cfg = filter["configuration"], !cfg.isUndefined, !cfg.isNull { ok = ok && matchString(configuration, value: cfg) }
+        if let k = filter["key"], !k.isUndefined, !k.isNull { ok = ok && matchString(key, value: k) }
+        return ok
+    }
+
+    private static func matchTBSFilter(target: String, configuration: String, key: String, filter: OrderedDictionary<String, Map>) -> Bool {
+        var ok = true
+        if let tgt = filter["target"], !tgt.isUndefined, !tgt.isNull { ok = ok && matchString(target, value: tgt) }
         if let cfg = filter["configuration"], !cfg.isUndefined, !cfg.isNull { ok = ok && matchString(configuration, value: cfg) }
         if let k = filter["key"], !k.isUndefined, !k.isNull { ok = ok && matchString(key, value: k) }
         return ok
@@ -462,6 +480,77 @@ enum XQResolvers {
         return result
     }
 
+    static func resolveTargetBuildSettings(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
+        let ctx = try expectCtx(context)
+        enum Scope { case projectOnly, targetOnly, merged }
+        func parseScope(_ m: Map?) -> Scope { switch m?.string?.uppercased() {
+            case "PROJECT_ONLY": return .projectOnly
+            case "MERGED": return .merged
+            default: return .targetOnly
+        } }
+        let scope = parseScope(args["scope"]) // default handled in schema
+
+        // Collect project-level config map
+        var projectSettingsByConfig: [String: [String: Any]] = [:]
+        if let proj = ctx.project.pbxproj.projects.first, let list = proj.buildConfigurationList {
+            for cfg in list.buildConfigurations { projectSettingsByConfig[cfg.name] = cfg.buildSettings }
+        }
+
+        var rows: [GTargetBuildSetting] = []
+        for nt in ctx.project.pbxproj.nativeTargets {
+            // Collect target-level settings per config
+            var targetSettingsByConfig: [String: [String: Any]] = [:]
+            if let list = nt.buildConfigurationList {
+                for cfg in list.buildConfigurations { targetSettingsByConfig[cfg.name] = cfg.buildSettings }
+            }
+            // Determine candidate configuration names
+            var names = Set<String>()
+            switch scope {
+            case .projectOnly:
+                names.formUnion(projectSettingsByConfig.keys)
+            case .targetOnly:
+                names.formUnion(targetSettingsByConfig.keys)
+            case .merged:
+                names.formUnion(projectSettingsByConfig.keys)
+                names.formUnion(targetSettingsByConfig.keys)
+            }
+            for cfgName in names {
+                let proj = projectSettingsByConfig[cfgName] ?? [:]
+                let tgt = targetSettingsByConfig[cfgName] ?? [:]
+                switch scope {
+                case .projectOnly:
+                    for (k, v) in proj {
+                        let norm = normalizeSettingValue(v)
+                        rows.append(GTargetBuildSetting(target: nt.name, configuration: cfgName, key: k, value: norm.value, values: norm.values, isArray: norm.isArray, origin: "PROJECT"))
+                    }
+                case .targetOnly:
+                    for (k, v) in tgt {
+                        let norm = normalizeSettingValue(v)
+                        rows.append(GTargetBuildSetting(target: nt.name, configuration: cfgName, key: k, value: norm.value, values: norm.values, isArray: norm.isArray, origin: "TARGET"))
+                    }
+                case .merged:
+                    var merged = proj
+                    var origin: [String: String] = Dictionary(uniqueKeysWithValues: proj.keys.map { ($0, "PROJECT") })
+                    for (k, v) in tgt { merged[k] = v; origin[k] = "TARGET" }
+                    for (k, v) in merged {
+                        let norm = normalizeSettingValue(v)
+                        rows.append(GTargetBuildSetting(target: nt.name, configuration: cfgName, key: k, value: norm.value, values: norm.values, isArray: norm.isArray, origin: origin[k] ?? "PROJECT"))
+                    }
+                }
+            }
+        }
+        // Filter
+        if let filter = args["filter"].dictionary {
+            rows = rows.filter { matchTBSFilter(target: $0.target, configuration: $0.configuration, key: $0.key, filter: filter) }
+        }
+        // Sort: target, configuration, key
+        rows.sort { a, b in
+            if a.target != b.target { return a.target < b.target }
+            if a.configuration != b.configuration { return a.configuration < b.configuration }
+            return a.key < b.key
+        }
+        return rows
+    }
     private static func matchTargetFilter(nt: PBXNativeTarget, filter: OrderedDictionary<String, Map>) -> Bool {
         let tname = nt.name
         let ttype = TargetType.from(productType: nt.productType)
