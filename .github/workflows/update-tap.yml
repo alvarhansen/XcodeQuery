@@ -4,10 +4,16 @@ on:
   workflow_run:
     workflows: ["Release"]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish to tap (optional). Defaults to latest if omitted."
+        required: false
+        type: string
 
 jobs:
   update-tap:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: macos-latest
     steps:
       - name: Checkout XcodeQuery
@@ -17,13 +23,21 @@ jobs:
 
       - name: Prepare variables
         id: prep
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          SHA="${{ github.event.workflow_run.head_sha }}"
-          git fetch --tags --force
-          TAG=$(git tag --points-at "$SHA" | head -n1)
-          if [ -z "$TAG" ]; then
-            TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          # If manually dispatched and a tag is provided, use it; otherwise resolve from the completed Release run
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "${DISPATCH_TAG:-}" ]; then
+            TAG="$DISPATCH_TAG"
+          else
+            SHA="${{ github.event.workflow_run.head_sha }}"
+            git fetch --tags --force
+            TAG=$(git tag --points-at "$SHA" | head -n1)
+            if [ -z "$TAG" ]; then
+              TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+            fi
           fi
           if [ -z "$TAG" ]; then
             echo "Could not resolve tag for head_sha=$SHA" >&2
