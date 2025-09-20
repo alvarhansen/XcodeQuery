@@ -71,7 +71,7 @@ struct CompletionProvider {
         case .selection(let typeName):
             guard let obj = typesByName[typeName] else { items = []; break }
             items = obj.fields.map { $0.name }.filter { $0.hasPrefix(prefix) }
-        case .arguments(let typeName, let field, let argNameForValue, let used):
+        case .arguments(_, let field, let argNameForValue, let used):
             if let argName = argNameForValue, let arg = field.args.first(where: { $0.name == argName }) {
                 // Value suggestions: only for enums
                 if case let .named(enumName, _) = arg.type, let en = schema.enums.first(where: { $0.name == enumName }) {
@@ -193,7 +193,7 @@ struct CompletionProvider {
                 case .lbrace:
                     if !argStack.isEmpty {
                         // First, handle nested input objects inside an existing input frame
-                        if var topInput = inputStack.popLast() {
+                        if let topInput = inputStack.popLast() {
                             if let key = topInput.lastColonKey, let fieldArg = topInput.fields.first(where: { $0.name == key }), let nextInput = underlyingInput(fieldArg.type) {
                                 inputStack.append(topInput) // restore before push
                                 inputStack.append(InputFrame(inputName: nextInput.name, fields: nextInput.fields, usedKeys: [], lastColonKey: nil))

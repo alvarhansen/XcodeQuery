@@ -1,5 +1,5 @@
 import XCTest
-import GraphQL
+@preconcurrency import GraphQL
 import NIO
 import XcodeProj
 import PathKit

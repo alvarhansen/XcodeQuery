@@ -1,6 +1,6 @@
 import Foundation
 import XcodeProj
-import GraphQL
+@preconcurrency import GraphQL
 import NIO
 
 public final class XcodeProjectQuerySession {

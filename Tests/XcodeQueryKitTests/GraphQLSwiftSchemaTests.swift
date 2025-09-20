@@ -1,6 +1,6 @@
 import XCTest
 @testable import XcodeQueryKit
-import GraphQL
+@preconcurrency import GraphQL
 
 final class GraphQLSwiftSchemaTests: XCTestCase {
     func testRootFieldsAndArgsMatchBaseline() throws {

@@ -133,9 +133,6 @@ struct SmartEditing {
 
             let closing: Character = (ch == "{") ? "}" : ")"
             // Allow moving an immediate closer on the same line; other closers are handled by indent-aware check below.
-            let rightSameLine = String(line[splitIdx...])
-            let immediateNonWS = rightSameLine.first(where: { !$0.isWhitespace })
-            let immediateCloserSameLine = (immediateNonWS == closing)
             var indentInner = computeIndentForNewLine(lines: lines, beforeRow: row, col: c, indentWidth: indentWidth)
             if indentInner == 0 { indentInner = indentWidth }
             let indentClose = max(0, indentInner - indentWidth)

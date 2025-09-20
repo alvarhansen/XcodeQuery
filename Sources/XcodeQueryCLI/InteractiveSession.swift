@@ -172,7 +172,7 @@ final class InteractiveSession {
 
         // Suggestions panel sizing
         let maxSuggestions = suggestionsActive ? min(8, suggestions.count) : 0
-        var suggestionsLinesCount = suggestionsActive && !suggestions.isEmpty ? 1 + maxSuggestions : 0
+        let suggestionsLinesCount = suggestionsActive && !suggestions.isEmpty ? 1 + maxSuggestions : 0
 
         // Compute input window
         let totalLines = lines.count
