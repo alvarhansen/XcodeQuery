@@ -16,13 +16,18 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "tar_url=https://github.com/alvarhansen/XcodeQuery/archive/refs/tags/${TAG}.tar.gz" >> $GITHUB_OUTPUT
+          # Prebuilt asset URL from the Release created by the release workflow
+          ASSET_URL="https://github.com/alvarhansen/XcodeQuery/releases/download/${TAG}/xcq-${TAG}-macos.zip"
+          echo "asset_url=$ASSET_URL" >> $GITHUB_OUTPUT
+          # Extract version without leading 'v'
+          VERSION_NO_V="${TAG#v}"
+          echo "version=$VERSION_NO_V" >> $GITHUB_OUTPUT
 
-      - name: Compute tarball sha256
+      - name: Compute asset sha256
         id: sha
         run: |
-          curl -L "${{ steps.prep.outputs.tar_url }}" -o source.tar.gz
-          SHASUM=$(shasum -a 256 source.tar.gz | awk '{print $1}')
+          curl -L "${{ steps.prep.outputs.asset_url }}" -o xcq.zip
+          SHASUM=$(shasum -a 256 xcq.zip | awk '{print $1}')
           echo "sha=$SHASUM" >> $GITHUB_OUTPUT
 
       - name: Checkout tap repository
@@ -32,7 +37,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: tap
 
-      - name: Update formula in tap
+      - name: Update formula in tap (binary install)
         working-directory: tap
         run: |
           mkdir -p Formula
@@ -42,16 +47,19 @@ class Xcq < Formula
   homepage "https://github.com/alvarhansen/XcodeQuery"
   license "MIT"
 
-  url "__URL__"
+  url "__ASSET_URL__"
   sha256 "__SHA__"
+  version "__VERSION__"
 
   head "https://github.com/alvarhansen/XcodeQuery.git", branch: "main"
 
-  depends_on xcode: :build
-
   def install
-    system "swift", "build", "-c", "release"
-    bin.install ".build/release/xcq"
+    if build.head?
+      system "swift", "build", "-c", "release"
+      bin.install ".build/release/xcq"
+    else
+      bin.install "xcq"
+    end
   end
 
   test do
@@ -59,8 +67,9 @@ class Xcq < Formula
   end
 end
 RUBY
-          sed -i '' "s|__URL__|${{ steps.prep.outputs.tar_url }}|g" Formula/xcq.rb
+          sed -i '' "s|__ASSET_URL__|${{ steps.prep.outputs.asset_url }}|g" Formula/xcq.rb
           sed -i '' "s|__SHA__|${{ steps.sha.outputs.sha }}|g" Formula/xcq.rb
+          sed -i '' "s|__VERSION__|${{ steps.prep.outputs.version }}|g" Formula/xcq.rb
           git add Formula/xcq.rb
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
