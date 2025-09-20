@@ -23,6 +23,7 @@ struct GFlatBuildScript { let target: String; let bs: BuildScriptEntry }
 struct GMembership { let path: String; let targets: [String] }
 struct GProjectBuildSetting { let configuration: String; let key: String; let value: String?; let values: [String]?; let isArray: Bool }
 struct GTargetBuildSetting { let target: String; let configuration: String; let key: String; let value: String?; let values: [String]?; let isArray: Bool; let origin: String }
+struct GBuildSetting { let configuration: String; let key: String; let value: String?; let values: [String]?; let isArray: Bool; let origin: String }
 
 // MARK: - Resolvers
 
@@ -257,6 +258,61 @@ enum XQResolvers {
         return wrapped
     }
 
+    static func resolveTarget_buildSettings(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
+        let t = try expect(source, as: GTarget.self)
+        enum Scope { case projectOnly, targetOnly, merged }
+        func parseScope(_ m: Map?) -> Scope { switch m?.string?.uppercased() {
+            case "PROJECT_ONLY": return .projectOnly
+            case "MERGED": return .merged
+            default: return .targetOnly
+        } }
+        let scope = parseScope(args["scope"]) // default handled in schema
+
+        // Collect settings per configuration
+        var projectSettingsByConfig: [String: [String: Any]] = [:]
+        if let proj = t.ctx.project.pbxproj.projects.first, let list = proj.buildConfigurationList {
+            for cfg in list.buildConfigurations { projectSettingsByConfig[cfg.name] = cfg.buildSettings }
+        }
+        var targetSettingsByConfig: [String: [String: Any]] = [:]
+        if let list = t.nt.buildConfigurationList {
+            for cfg in list.buildConfigurations { targetSettingsByConfig[cfg.name] = cfg.buildSettings }
+        }
+
+        var rows: [GBuildSetting] = []
+        var names = Set<String>()
+        switch scope {
+        case .projectOnly: names.formUnion(projectSettingsByConfig.keys)
+        case .targetOnly: names.formUnion(targetSettingsByConfig.keys)
+        case .merged: names.formUnion(projectSettingsByConfig.keys); names.formUnion(targetSettingsByConfig.keys)
+        }
+        for cfgName in names {
+            let proj = projectSettingsByConfig[cfgName] ?? [:]
+            let tgt = targetSettingsByConfig[cfgName] ?? [:]
+            switch scope {
+            case .projectOnly:
+                for (k, v) in proj { let n = normalizeSettingValue(v); rows.append(GBuildSetting(configuration: cfgName, key: k, value: n.value, values: n.values, isArray: n.isArray, origin: "PROJECT")) }
+            case .targetOnly:
+                for (k, v) in tgt { let n = normalizeSettingValue(v); rows.append(GBuildSetting(configuration: cfgName, key: k, value: n.value, values: n.values, isArray: n.isArray, origin: "TARGET")) }
+            case .merged:
+                var merged = proj
+                var origin: [String: String] = Dictionary(uniqueKeysWithValues: proj.keys.map { ($0, "PROJECT") })
+                for (k, v) in tgt { merged[k] = v; origin[k] = "TARGET" }
+                for (k, v) in merged { let n = normalizeSettingValue(v); rows.append(GBuildSetting(configuration: cfgName, key: k, value: n.value, values: n.values, isArray: n.isArray, origin: origin[k] ?? "PROJECT")) }
+            }
+        }
+        // Filter by configuration/key if provided
+        if let filter = args["filter"].dictionary {
+            rows = rows.filter { r in
+                var ok = true
+                if let cfg = filter["configuration"], !cfg.isUndefined, !cfg.isNull { ok = ok && matchString(r.configuration, value: cfg) }
+                if let k = filter["key"], !k.isUndefined, !k.isNull { ok = ok && matchString(r.key, value: k) }
+                return ok
+            }
+        }
+        rows.sort { a, b in if a.configuration != b.configuration { return a.configuration < b.configuration } else { return a.key < b.key } }
+        return rows
+    }
+
     // MARK: Leaf object resolvers
     static func resolveSource_path(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GSource.self).path }
     static func resolveResource_path(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GResource.self).path }
@@ -311,6 +367,14 @@ enum XQResolvers {
     static func resolveTargetBuildSetting_values(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GTargetBuildSetting.self).values }
     static func resolveTargetBuildSetting_isArray(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GTargetBuildSetting.self).isArray }
     static func resolveTargetBuildSetting_origin(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GTargetBuildSetting.self).origin }
+
+    // MARK: BuildSetting (nested under Target) leaf resolvers
+    static func resolveBuildSetting_configuration(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GBuildSetting.self).configuration }
+    static func resolveBuildSetting_key(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GBuildSetting.self).key }
+    static func resolveBuildSetting_value(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GBuildSetting.self).value }
+    static func resolveBuildSetting_values(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GBuildSetting.self).values }
+    static func resolveBuildSetting_isArray(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GBuildSetting.self).isArray }
+    static func resolveBuildSetting_origin(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GBuildSetting.self).origin }
 
     // MARK: Helpers: context, casting
     private static func expectCtx(_ any: Any) throws -> XQGQLContext {

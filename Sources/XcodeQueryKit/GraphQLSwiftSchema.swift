@@ -70,6 +70,12 @@ enum XQGraphQLSwiftSchema {
             "name": InputObjectField(type: stringMatch),
             "target": InputObjectField(type: stringMatch),
         ])
+        // Build settings filter (used by Target.buildSettings and targetBuildSettings)
+        let buildSettingFilter = try GraphQLInputObjectType(name: "BuildSettingFilter", fields: [
+            "key": InputObjectField(type: stringMatch),
+            "configuration": InputObjectField(type: stringMatch),
+            "target": InputObjectField(type: stringMatch),
+        ])
 
         // MARK: Objects
         // Leaf/simple types
@@ -86,6 +92,16 @@ enum XQGraphQLSwiftSchema {
             "outputPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))), resolve: XQResolvers.resolveBuildScript_outputPaths),
             "inputFileListPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))), resolve: XQResolvers.resolveBuildScript_inputFileListPaths),
             "outputFileListPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))), resolve: XQResolvers.resolveBuildScript_outputFileListPaths),
+        ])
+
+        // BuildSetting object used by Target.buildSettings
+        let buildSetting = try GraphQLObjectType(name: "BuildSetting", fields: [
+            "configuration": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveBuildSetting_configuration),
+            "key": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveBuildSetting_key),
+            "value": GraphQLField(type: string, resolve: XQResolvers.resolveBuildSetting_value),
+            "values": GraphQLField(type: GraphQLList(GraphQLNonNull(string)), resolve: XQResolvers.resolveBuildSetting_values),
+            "isArray": GraphQLField(type: GraphQLNonNull(boolean), resolve: XQResolvers.resolveBuildSetting_isArray),
+            "origin": GraphQLField(type: GraphQLNonNull(buildSettingOrigin), resolve: XQResolvers.resolveBuildSetting_origin),
         ])
 
         // Target and nested fields
@@ -117,6 +133,14 @@ enum XQGraphQLSwiftSchema {
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(buildScript))),
                 args: ["filter": GraphQLArgument(type: buildScriptFilter)],
                 resolve: XQResolvers.resolveTarget_buildScripts
+            ),
+            "buildSettings": GraphQLField(
+                type: GraphQLNonNull(GraphQLList(GraphQLNonNull(buildSetting))),
+                args: [
+                    "scope": GraphQLArgument(type: buildSettingsScope, defaultValue: Map("TARGET_ONLY")),
+                    "filter": GraphQLArgument(type: buildSettingFilter)
+                ],
+                resolve: XQResolvers.resolveTarget_buildSettings
             ),
         ])
 
@@ -152,11 +176,6 @@ enum XQGraphQLSwiftSchema {
             "key": InputObjectField(type: stringMatch),
             "configuration": InputObjectField(type: stringMatch),
         ])
-        let buildSettingFilter = try GraphQLInputObjectType(name: "BuildSettingFilter", fields: [
-            "key": InputObjectField(type: stringMatch),
-            "configuration": InputObjectField(type: stringMatch),
-            "target": InputObjectField(type: stringMatch),
-        ])
         let projectBuildSetting = try GraphQLObjectType(name: "ProjectBuildSetting", fields: [
             "configuration": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveProjectBuildSetting_configuration),
             "key": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveProjectBuildSetting_key),
@@ -173,6 +192,7 @@ enum XQGraphQLSwiftSchema {
             "isArray": GraphQLField(type: GraphQLNonNull(boolean), resolve: XQResolvers.resolveTargetBuildSetting_isArray),
             "origin": GraphQLField(type: GraphQLNonNull(buildSettingOrigin), resolve: XQResolvers.resolveTargetBuildSetting_origin),
         ])
+        // (buildSetting defined above)
 
         // MARK: Query root
         let query = try GraphQLObjectType(name: "Query", fields: [
