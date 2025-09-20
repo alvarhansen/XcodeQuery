@@ -21,6 +21,7 @@ struct GFlatResource { let target: String; let path: String }
 struct GFlatDependency { let target: String; let dep: PBXNativeTarget }
 struct GFlatBuildScript { let target: String; let bs: BuildScriptEntry }
 struct GMembership { let path: String; let targets: [String] }
+struct GProjectBuildSetting { let configuration: String; let key: String; let value: String?; let values: [String]?; let isArray: Bool }
 
 // MARK: - Resolvers
 
@@ -40,6 +41,32 @@ enum XQResolvers {
             }
         }
         return Array(names).sorted()
+    }
+    static func resolveProjectBuildSettings(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
+        let ctx = try expectCtx(context)
+        var rows: [GProjectBuildSetting] = []
+        // Project-level configurations
+        guard let proj = ctx.project.pbxproj.projects.first, let list = proj.buildConfigurationList else {
+            return rows
+        }
+        for cfg in list.buildConfigurations {
+            let cfgName = cfg.name
+            let settings = cfg.buildSettings
+            for (key, raw) in settings {
+                let norm = normalizeSettingValue(raw)
+                rows.append(GProjectBuildSetting(configuration: cfgName, key: key, value: norm.value, values: norm.values, isArray: norm.isArray))
+            }
+        }
+        // Filter by configuration/key if provided
+        if let filter = args["filter"].dictionary {
+            rows = rows.filter { matchPBSFilter(configuration: $0.configuration, key: $0.key, filter: filter) }
+        }
+        // Sort: configuration, key
+        rows.sort { a, b in
+            if a.configuration != b.configuration { return a.configuration < b.configuration }
+            return a.key < b.key
+        }
+        return rows
     }
     static func resolveTargets(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
         let ctx = try expectCtx(context)
@@ -268,6 +295,13 @@ enum XQResolvers {
     static func resolveMembership_path(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GMembership.self).path }
     static func resolveMembership_targets(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GMembership.self).targets }
 
+    // MARK: ProjectBuildSetting leaf resolvers
+    static func resolveProjectBuildSetting_configuration(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GProjectBuildSetting.self).configuration }
+    static func resolveProjectBuildSetting_key(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GProjectBuildSetting.self).key }
+    static func resolveProjectBuildSetting_value(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GProjectBuildSetting.self).value }
+    static func resolveProjectBuildSetting_values(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GProjectBuildSetting.self).values }
+    static func resolveProjectBuildSetting_isArray(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GProjectBuildSetting.self).isArray }
+
     // MARK: Helpers: context, casting
     private static func expectCtx(_ any: Any) throws -> XQGQLContext {
         guard let ctx = any as? XQGQLContext else { throw GraphQLError(message: "Missing execution context") }
@@ -283,6 +317,25 @@ enum XQResolvers {
     private static func parsePathMode(_ m: Map?) -> PathMode? {
         guard let s = m?.string?.uppercased() else { return nil }
         switch s { case "FILE_REF": return .fileRef; case "ABSOLUTE": return .absolute; case "NORMALIZED": return .normalized; default: return nil }
+    }
+
+    // MARK: Build settings helpers
+    private static func normalizeSettingValue(_ any: Any) -> (value: String?, values: [String]?, isArray: Bool) {
+        if let arr = any as? [String] {
+            return (nil, arr.map { String($0) }, true)
+        }
+        if let arrAny = any as? [Any] {
+            let strs = arrAny.map { String(describing: $0) }
+            return (nil, strs, true)
+        }
+        return (String(describing: any), nil, false)
+    }
+
+    private static func matchPBSFilter(configuration: String, key: String, filter: OrderedDictionary<String, Map>) -> Bool {
+        var ok = true
+        if let cfg = filter["configuration"], !cfg.isUndefined, !cfg.isNull { ok = ok && matchString(configuration, value: cfg) }
+        if let k = filter["key"], !k.isUndefined, !k.isNull { ok = ok && matchString(key, value: k) }
+        return ok
     }
 
     private static func sourceFiles(targetName: String, mode: PathMode, ctx: XQGQLContext) throws -> [String] {

@@ -137,11 +137,31 @@ enum XQGraphQLSwiftSchema {
             "targets": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))), resolve: XQResolvers.resolveMembership_targets)
         ])
 
+        // Build settings: inputs and objects
+        let projectBuildSettingFilter = try GraphQLInputObjectType(name: "ProjectBuildSettingFilter", fields: [
+            "key": InputObjectField(type: stringMatch),
+            "configuration": InputObjectField(type: stringMatch),
+        ])
+        let projectBuildSetting = try GraphQLObjectType(name: "ProjectBuildSetting", fields: [
+            "configuration": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveProjectBuildSetting_configuration),
+            "key": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveProjectBuildSetting_key),
+            "value": GraphQLField(type: string, resolve: XQResolvers.resolveProjectBuildSetting_value),
+            "values": GraphQLField(type: GraphQLList(GraphQLNonNull(string)), resolve: XQResolvers.resolveProjectBuildSetting_values),
+            "isArray": GraphQLField(type: GraphQLNonNull(boolean), resolve: XQResolvers.resolveProjectBuildSetting_isArray),
+        ])
+
         // MARK: Query root
         let query = try GraphQLObjectType(name: "Query", fields: [
             "buildConfigurations": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))),
                 resolve: XQResolvers.resolveBuildConfigurations
+            ),
+            "projectBuildSettings": GraphQLField(
+                type: GraphQLNonNull(GraphQLList(GraphQLNonNull(projectBuildSetting))),
+                args: [
+                    "filter": GraphQLArgument(type: projectBuildSettingFilter)
+                ],
+                resolve: XQResolvers.resolveProjectBuildSettings
             ),
             "targets": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(target))),

@@ -112,7 +112,11 @@ struct GraphQLBaselineFixture {
                 libTarget.addingResources(),
                 appTarget.addingResources(),
                 testsTarget
-            ]
+            ],
+            settings: Settings(dictionary: [
+                "SWIFT_VERSION": "5.9",
+                "SWIFT_ACTIVE_COMPILATION_CONDITIONS": ["DEBUG"]
+            ])
         )
         return project
     }
