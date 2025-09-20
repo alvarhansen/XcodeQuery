@@ -7,6 +7,19 @@ final class GraphQLBaselineSnapshotsTests: XCTestCase {
         let query: String
     }
 
+    func testGraphQLOperatorSnapshots() throws {
+        let query = """
+        targetSources(pathMode: NORMALIZED, filter: { path: { prefix: \"Shared/\" } }) { target path }
+        targetResources(filter: { path: { suffix: \"json\" } }) { target path }
+        targetDependencies(filter: { name: { prefix: \"A\" } }) { target name type }
+        """
+        let fixture = try GraphQLBaselineFixture()
+        var json = try fixture.evaluateToCanonicalJSON(query: query)
+        // Normalize escaped slashes to match snapshot formatting
+        json = json.replacingOccurrences(of: "\\/", with: "/")
+        try GraphQLSnapshot.assertSnapshot(data: json, named: "operators", subdirectory: "GraphQLBaseline")
+    }
+
     @MainActor
     func testGraphQLBaselineSnapshots() throws {
         let cases: [SnapshotCase] = [

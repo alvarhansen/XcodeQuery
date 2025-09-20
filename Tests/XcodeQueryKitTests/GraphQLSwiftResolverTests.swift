@@ -705,4 +705,38 @@ final class GraphQLSwiftResolverTests: XCTestCase {
             XCTAssertTrue(arr.contains { v in v.dictionary?["target"]?.string == "AppTests" && v.dictionary?["name"]?.string == "App" })
         }
     }
+
+    func testTargetDependenciesFilterByNamePrefixAndContains() throws {
+        let fixture = try GraphQLBaselineFixture()
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 175, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 176, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        // name prefix: "A" -> should include AppTests -> App
+        do {
+            let q = "{ targetDependencies(filter: { name: { prefix: \"A\" } }) { target name } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            let arr = result.data?.dictionary?["targetDependencies"]?.array ?? []
+            XCTAssertTrue(arr.contains { $0.dictionary?["target"]?.string == "AppTests" && $0.dictionary?["name"]?.string == "App" })
+            // Ensure all names match prefix
+            for v in arr { XCTAssertTrue((v.dictionary?["name"]?.string ?? "").hasPrefix("A")) }
+        }
+
+        // name contains: "ib" -> should include App -> Lib
+        do {
+            let q = "{ targetDependencies(filter: { name: { contains: \"ib\" } }) { target name } }"
+            let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+            let arr = result.data?.dictionary?["targetDependencies"]?.array ?? []
+            XCTAssertTrue(arr.contains { $0.dictionary?["target"]?.string == "App" && $0.dictionary?["name"]?.string == "Lib" })
+            for v in arr { XCTAssertTrue((v.dictionary?["name"]?.string ?? "").contains("ib")) }
+        }
+    }
 }

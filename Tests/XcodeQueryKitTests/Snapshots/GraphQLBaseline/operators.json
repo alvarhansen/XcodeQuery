@@ -1,0 +1,29 @@
+{
+  "targetDependencies" : [
+    {
+      "name" : "App",
+      "target" : "AppTests",
+      "type" : "APP"
+    }
+  ],
+  "targetResources" : [
+    {
+      "path" : "Config.json",
+      "target" : "App"
+    },
+    {
+      "path" : "Config.json",
+      "target" : "Lib"
+    }
+  ],
+  "targetSources" : [
+    {
+      "path" : "Shared/Shared.swift",
+      "target" : "App"
+    },
+    {
+      "path" : "Shared/Shared.swift",
+      "target" : "Lib"
+    }
+  ]
+}
