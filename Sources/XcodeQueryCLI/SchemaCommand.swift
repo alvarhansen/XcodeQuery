@@ -141,7 +141,7 @@ public struct SchemaCommand: AsyncParsableCommand {
     // Test hook
     static func __test_renderSchema(useColor: Bool) -> String { renderSchemaFromModel(color: useColor) }
 
-    // MARK: - New renderer backed by static schema model
+    // MARK: - Renderer backed by adapter-built schema model
     private static func renderSchemaFromModel(color: Bool) -> String {
         let Cx = C(enabled: color)
         var out: [String] = []
@@ -151,14 +151,16 @@ public struct SchemaCommand: AsyncParsableCommand {
 
         // Top-level fields
         out.append(Cx.b("Top-level fields (selection required):"))
-        for f in XcodeQuerySchema.schema.topLevel {
+        let model: XQSchema = try! XQSchemaBuilder.fromGraphQLSwift()
+
+        for f in model.topLevel {
             out.append("- " + Cx.s(f.name, Cx.green) + formatArgs(f.args, Cx) + Cx.d(": ") + Cx.s(render(f.type), Cx.cyan))
         }
         out.append("")
 
         // Types
         out.append(Cx.b("Types:"))
-        for t in XcodeQuerySchema.schema.types {
+        for t in model.types {
             out.append("- " + Cx.s("type", Cx.blue) + " " + Cx.s(t.name, Cx.cyan) + " {")
             for f in t.fields {
                 if f.args.isEmpty {
@@ -173,7 +175,7 @@ public struct SchemaCommand: AsyncParsableCommand {
 
         // Inputs
         out.append(Cx.b("Filter inputs:"))
-        for i in XcodeQuerySchema.schema.inputs {
+        for i in model.inputs {
             out.append("- " + Cx.s("input", Cx.blue) + " " + Cx.s(i.name, Cx.cyan) + " {")
             for a in i.fields {
                 out.append("    " + Cx.s(a.name + ":", Cx.yellow) + " " + Cx.s(render(a.type), Cx.cyan))
@@ -184,7 +186,7 @@ public struct SchemaCommand: AsyncParsableCommand {
 
         // Enums
         out.append(Cx.b("Enums:"))
-        for e in XcodeQuerySchema.schema.enums {
+        for e in model.enums {
             out.append("- " + Cx.s("enum", Cx.blue) + " " + Cx.s(e.name, Cx.cyan) + " " + Cx.d("(") + e.cases.map { Cx.s($0, Cx.magenta) }.joined(separator: Cx.d(", ")) + Cx.d(")"))
         }
         out.append("")

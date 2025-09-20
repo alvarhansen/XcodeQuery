@@ -75,5 +75,4 @@ Testing Artifacts
 - Failure-mode tests for parse and execution errors live in `Tests/XcodeQueryKitTests/GraphQLErrorTests.swift`.
 
 Provenance
-- This schema mirrors `Sources/XcodeQueryKit/XcodeQuerySchema.swift` and the current executor at `Sources/XcodeQueryKit/GraphQL.swift`.
-
+- This schema mirrors the GraphQLSwift runtime schema (`Sources/XcodeQueryKit/GraphQLSwiftSchema.swift`) and is used by the CLI via an adapter (`XQSchemaBuilder`).

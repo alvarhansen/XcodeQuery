@@ -65,13 +65,13 @@ Aliases: `interactive` → `i`.
   - Optionally an `actor` wrapper to serialize access if we find thread-safety issues in `XcodeProj`.
 - This avoids reloading the `.xcodeproj` for each keystroke, enabling sub-100ms evaluations for small queries.
 
-4) Schema Introspection Surface (Kit) — M2
-- Introduce a light, static schema model that describes:
+4) Schema Introspection Surface (Kit)
+- Use the GraphQLSwift runtime schema as the source of truth, adapted into a lightweight model via `XQSchemaBuilder`:
   - Top-level fields, their arguments (name, type, defaults), and return types.
   - Nested fields for object types (Target, Source, Resource, BuildScript, etc.).
 - Goals:
-  - Drive both `SchemaCommand` rendering and future autocomplete from a single source of truth.
-  - Keep it static (no runtime reflection) and colocated with resolvers.
+  - Drive both `SchemaCommand` rendering and autocomplete from a single source of truth (the runtime schema).
+  - Keep the adapter small and deterministic; no runtime reflection beyond GraphQLSwift’s types.
 
 ## Evaluation Pipeline (InteractiveSession)
 
@@ -110,7 +110,7 @@ Planned but not in the initial milestone:
 
 - `XcodeQueryKit`:
   - Add tests for `XcodeProjectQuerySession` to verify reuse across multiple evaluations returns consistent results and improves performance (coarse checks).
-  - Extract and test the schema description model separately from rendering.
+  - Test the schema adapter (`XQSchemaBuilder`) separately from rendering.
 - `XcodeQueryCLI`:
   - Add non-TTY REPL tests (line-by-line mode) to cover basic flow without requiring a true terminal.
   - Verify `--debounce`, `--format`, and color flags parsing.

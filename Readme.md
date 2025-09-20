@@ -44,6 +44,8 @@ After install, verify: `xcq --help`
 
 ## Schema Overview
 
+SchemaCommand renders from the GraphQLSwift runtime schema (single source of truth).
+
 Top-level fields (selection required):
 - `targets(type: TargetType, filter: TargetFilter): [Target!]!`
 - `target(name: String!): Target`
