@@ -33,6 +33,24 @@ final class GraphQLBaselineSnapshotsTests: XCTestCase {
         }
     }
 
+    func testRegexFiltersSnapshots() throws {
+        let query = """
+        targetSources(pathMode: NORMALIZED, filter: { path: { regex: "\\.swift$" } }) { target path }
+        targetResources(filter: { path: { regex: "json$" } }) { target path }
+        """
+        let fixture = try GraphQLBaselineFixture()
+        var json = try fixture.evaluateToCanonicalJSON(query: query)
+        json = json.replacingOccurrences(of: "\\/", with: "/")
+        try GraphQLSnapshot.assertSnapshot(data: json, named: "regex_filters", subdirectory: "GraphQLBaseline")
+    }
+
+    func testBuildScriptsNestedPerTargetSnapshot() throws {
+        let query = "targets { name buildScripts { name stage } }"
+        let fixture = try GraphQLBaselineFixture()
+        let json = try fixture.evaluateToCanonicalJSON(query: query)
+        try GraphQLSnapshot.assertSnapshot(data: json, named: "buildscripts_nested", subdirectory: "GraphQLBaseline")
+    }
+
     @MainActor
     func testGraphQLBaselineSnapshots() throws {
         let cases: [SnapshotCase] = [

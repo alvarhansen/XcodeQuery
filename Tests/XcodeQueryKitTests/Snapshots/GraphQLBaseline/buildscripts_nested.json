@@ -1,0 +1,29 @@
+{
+  "targets" : [
+    {
+      "buildScripts" : [
+        {
+          "name" : "Pre Script",
+          "stage" : "PRE"
+        },
+        {
+          "name" : "Post Script",
+          "stage" : "POST"
+        }
+      ],
+      "name" : "App"
+    },
+    {
+      "buildScripts" : [
+
+      ],
+      "name" : "AppTests"
+    },
+    {
+      "buildScripts" : [
+
+      ],
+      "name" : "Lib"
+    }
+  ]
+}

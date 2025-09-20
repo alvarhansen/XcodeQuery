@@ -1,0 +1,30 @@
+{
+  "targetResources" : [
+    {
+      "path" : "Config.json",
+      "target" : "App"
+    },
+    {
+      "path" : "Config.json",
+      "target" : "Lib"
+    }
+  ],
+  "targetSources" : [
+    {
+      "path" : "App/Sources/AppFile.swift",
+      "target" : "App"
+    },
+    {
+      "path" : "Shared/Shared.swift",
+      "target" : "App"
+    },
+    {
+      "path" : "Lib/Sources/LibFile.swift",
+      "target" : "Lib"
+    },
+    {
+      "path" : "Shared/Shared.swift",
+      "target" : "Lib"
+    }
+  ]
+}
