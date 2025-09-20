@@ -25,23 +25,22 @@ jobs:
           cd dist
           zip -r xcq-${{ github.ref_name }}-macos.zip xcq
 
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: ${{ github.ref_name }}
-          draft: false
-          prerelease: false
+      - name: Ensure gh CLI
+        run: |
+          if ! command -v gh >/dev/null 2>&1; then
+            brew update
+            brew install gh
+          fi
 
-      - name: Upload binary asset
-        uses: actions/upload-release-asset@v1
+      - name: Publish release via gh (idempotent)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist/xcq-${{ github.ref_name }}-macos.zip
-          asset_name: xcq-${{ github.ref_name }}-macos.zip
-          asset_content_type: application/zip
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          ASSET="dist/xcq-${TAG}-macos.zip"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" "$ASSET" --title "$TAG" --generate-notes
+          else
+            gh release upload "$TAG" "$ASSET" --clobber
+          fi

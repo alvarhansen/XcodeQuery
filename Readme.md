@@ -8,8 +8,8 @@ Xcode Query (xcq) uses a GraphQL-style query language for predictable, composabl
 
 - Recommended (tap):
   - `brew tap alvarhansen/xcodequery`
-  - HEAD: `brew install --HEAD xcq`
-  - Stable (Not yet available): `brew install xcq`
+  - Stable: `brew install xcq`
+  - HEAD (latest main): `brew install --HEAD xcq`
 
 After install, verify: `xcq --help`
 
@@ -128,21 +128,15 @@ Types and inputs:
 
 ## Releasing (maintainers)
 
-1) Create a version tag, e.g. `v0.1.0` and push it:
+1) Create a version tag, e.g. `v0.1.0`, and push it:
    - `git tag v0.1.0 && git push origin v0.1.0`
 
-2) GitHub Actions will:
-   - Build a release binary for macOS
-   - Create a GitHub Release and upload `xcq-v0.1.0-macos.zip`
+2) GitHub Actions will automatically:
+   - Build the release binary for macOS
+   - Publish the GitHub Release (idempotent via `gh`), uploading `xcq-v0.1.0-macos.zip`
+   - Update the `alvarhansen/homebrew-xcodequery` tap to install the prebuilt binary
 
-3) Update Homebrew formula for stable installs:
-   - Edit `HomebrewFormula/xcq.rb`:
-     - Set `url "https://github.com/alvarhansen/XcodeQuery/archive/refs/tags/v0.1.0.tar.gz"`
-     - Set `sha256` for that tarball (example to compute):
-       - `curl -L https://github.com/alvarhansen/XcodeQuery/archive/refs/tags/v0.1.0.tar.gz | shasum -a 256`
-   - Commit and push the formula change on main.
-
-4) Users can then install via the tap:
+3) Users install via the tap:
    - Stable: `brew tap alvarhansen/xcodequery && brew install xcq`
    - HEAD: `brew tap alvarhansen/xcodequery && brew install --HEAD xcq`
 
