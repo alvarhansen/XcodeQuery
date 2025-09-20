@@ -8,12 +8,10 @@ public final class XcodeProjectQuerySession {
 
     private let projectPath: String
     private let project: XcodeProj
-    private let executor: GraphQLExecutor
 
     public init(projectPath: String) throws {
         self.projectPath = projectPath
         self.project = try XcodeProj(pathString: projectPath)
-        self.executor = GraphQLExecutor(project: project, projectPath: projectPath)
     }
 
     public func evaluate(query: String) throws -> AnyEncodable {
@@ -21,13 +19,9 @@ public final class XcodeProjectQuerySession {
         guard !trimmed.hasPrefix("{") else {
             throw Error.invalidQuery("Top-level braces are not supported. Write selection only, e.g., targets { name type }")
         }
-        // Feature flag: default is GraphQLSwift when set (CLI flips this by default)
-        if let cstr = getenv("XCQ_USE_GRAPHQLSWIFT"), String(cString: cstr) == "1" {
-            let swift = try evaluateWithGraphQLSwift(selection: trimmed)
-            return AnyEncodable(swift)
-        }
-        let value = try GraphQL.parseAndExecute(query: trimmed, with: executor)
-        return AnyEncodable(value)
+        // GraphQLSwift-only execution
+        let swift = try evaluateWithGraphQLSwift(selection: trimmed)
+        return AnyEncodable(swift)
     }
 
     private func evaluateWithGraphQLSwift(selection: String) throws -> JSONValue {
@@ -37,6 +31,10 @@ public final class XcodeProjectQuerySession {
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let result = try graphql(schema: schema, request: request, context: ctx, eventLoopGroup: group).wait()
+        if !result.errors.isEmpty {
+            let msg = result.errors.map { $0.message }.joined(separator: "; ")
+            throw NSError(domain: "GraphQL", code: 1, userInfo: [NSLocalizedDescriptionKey: msg])
+        }
         guard let data = result.data else { return .object([:]) }
         return JSONValue(fromMap: data)
     }

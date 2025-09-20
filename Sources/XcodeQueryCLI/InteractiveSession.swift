@@ -358,23 +358,8 @@ final class InteractiveSession {
     @MainActor
     private func renderErrorIfLatest(_ error: any Error, myRev: UInt64) {
         if myRev != revision { return }
-        let current = lines.joined(separator: "\n")
-        var header = String(describing: error)
-        var caret: String? = nil
-        if let gql = error as? GQLError {
-            switch gql {
-            case .parseAt(let position, let message):
-                header = "Parse error: \(message)"
-                let (row, col) = SmartEditing.mapPosition(current, position: position)
-                let split = current.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-                let line = (row >= 0 && row < split.count) ? split[row] : ""
-                caret = SmartEditing.caretLine(for: line, col: col)
-            default:
-                break
-            }
-        }
-        var preview = colorize(header, color: .red)
-        if let c = caret { preview += "\n" + c }
+        let header = String(describing: error)
+        let preview = colorize(header, color: .red)
         render(preview: preview)
     }
 

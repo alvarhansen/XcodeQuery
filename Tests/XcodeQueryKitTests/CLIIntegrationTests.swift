@@ -52,7 +52,7 @@ final class CLIIntegrationTests: XCTestCase {
         // 1) targets
         struct TargetsResp: Decodable { let targets: [T] }
         struct T: Decodable { let name: String, type: String }
-        var (status, stdout, stderr) = try Self.run(process: xcqPath, args: ["targets { name type }", "--legacy", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        var (status, stdout, stderr) = try Self.run(process: xcqPath, args: ["targets { name type }", "--project", projPath.string], workingDirectory: Self.packageRoot())
         if status != 0 { XCTFail("xcq failed (\(status))\nSTDERR: \(stderr)\nSTDOUT: \(stdout)"); return }
         let targets = try JSONDecoder().decode(TargetsResp.self, from: stdout.data(using: .utf8)!).targets
         let names = Set(targets.map { $0.name })
@@ -60,13 +60,13 @@ final class CLIIntegrationTests: XCTestCase {
 
         // 2) sanity: targets again via a separate run
         struct D: Decodable { let name: String }
-        (status, stdout, stderr) = try Self.run(process: xcqPath, args: ["targets { name }", "--legacy", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        (status, stdout, stderr) = try Self.run(process: xcqPath, args: ["targets { name }", "--project", projPath.string], workingDirectory: Self.packageRoot())
         XCTAssertEqual(status, 0)
 
         // 3) build scripts (flat, PRE)
         struct BSEntry: Decodable { let target: String; let name: String?; let stage: String; let inputFileListPaths: [String]; let outputFileListPaths: [String] }
         struct BSResp: Decodable { let targetBuildScripts: [BSEntry] }
-        (status, stdout, stderr) = try Self.run(process: xcqPath, args: ["targetBuildScripts(filter: { stage: PRE }) { target name stage inputFileListPaths outputFileListPaths }", "--legacy", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        (status, stdout, stderr) = try Self.run(process: xcqPath, args: ["targetBuildScripts(filter: { stage: PRE }) { target name stage inputFileListPaths outputFileListPaths }", "--project", projPath.string], workingDirectory: Self.packageRoot())
         if status != 0 { XCTFail("buildScripts failed (\(status))\nSTDERR: \(stderr)"); return }
         let bs = try JSONDecoder().decode(BSResp.self, from: stdout.data(using: .utf8)!).targetBuildScripts
         XCTAssertNotNil(bs.first(where: { $0.target == "Lib" && $0.name == "PreLib" }))
@@ -75,7 +75,7 @@ final class CLIIntegrationTests: XCTestCase {
         struct Src: Decodable { let path: String }
         struct TWithSources: Decodable { let name: String; let sources: [Src] }
         struct SResp: Decodable { let targets: [TWithSources] }
-        (status, stdout, stderr) = try Self.run(process: xcqPath, args: [#"targets(type: FRAMEWORK) { name sources(pathMode: NORMALIZED, filter: { path: { regex: "\.swift$" } }) { path } }"#, "--legacy", "--project", projPath.string], workingDirectory: Self.packageRoot())
+        (status, stdout, stderr) = try Self.run(process: xcqPath, args: [#"targets(type: FRAMEWORK) { name sources(pathMode: NORMALIZED, filter: { path: { regex: "\\.swift$" } }) { path } }"#, "--project", projPath.string], workingDirectory: Self.packageRoot())
         if status != 0 { XCTFail("sources failed (\(status))\nSTDERR: \(stderr)"); return }
         let srcOut = try JSONDecoder().decode(SResp.self, from: stdout.data(using: .utf8)!)
         let hasLibSwift = srcOut.targets.flatMap { $0.sources }.contains { $0.path.contains("LibFile.swift") }
@@ -127,3 +127,4 @@ private enum Temporary {
         return TempDir(url: url)
     }
 }
+

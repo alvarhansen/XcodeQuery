@@ -58,7 +58,7 @@ Aliases: `interactive` → `i`.
   - On exit, restore terminal state even on error (defer blocks).
 
 3) XcodeProjectQuerySession (Kit)
-- New type in `XcodeQueryKit` that encapsulates a single loaded `XcodeProj` and `GraphQLExecutor` for repeated, fast evaluations.
+- New type in `XcodeQueryKit` that encapsulates a single loaded `XcodeProj` and GraphQL-backed engine (GraphQLSwift) for repeated, fast evaluations.
 - API sketch:
   - `init(projectPath: String) throws` loads `XcodeProj` once.
   - `func evaluate(query: String) throws -> AnyEncodable` (same semantics as today but reuses the in-memory project).
@@ -100,7 +100,7 @@ Aliases: `interactive` → `i`.
 Planned but not in the initial milestone:
 - `CompletionProvider` that consumes the schema model and current buffer/cursor to propose candidates.
 - Tokenization strategy:
-  - Lightweight lexer for identifiers, punctuation, and strings (reuse or adapt `GQLParser` token rules).
+  - Lightweight lexer for identifiers, punctuation, and strings (tokenization consistent with the current GraphQL grammar).
   - Context inference to offer field names where a selection is expected, argument names inside `(...)`, and enum symbols for known args.
 - Editor bindings:
   - Tab to request completions; Up/Down to navigate; Enter/Right to accept; Esc to dismiss.

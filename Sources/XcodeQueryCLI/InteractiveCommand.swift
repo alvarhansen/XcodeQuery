@@ -20,23 +20,12 @@ public struct InteractiveCommand: AsyncParsableCommand {
     @Flag(name: .customLong("color"), help: "Force ANSI colors in interactive UI (errors/hints)")
     var yesColor: Bool = false
 
-    @Flag(name: .customLong("legacy"), help: "Use legacy parser engine instead of GraphQLSwift (temporary fallback)")
-    var legacy: Bool = false
-    @Flag(name: .customLong("compare-engines"), help: ArgumentHelp("Execute both engines and report mismatches (stderr)", visibility: .hidden))
-    var compareEngines: Bool = false
+    // Legacy flags removed
 
     public init() {}
 
     public func run() async throws {
         let projectPath = try resolveProjectPath()
-        // Default interactive to GraphQLSwift unless --legacy
-        if legacy {
-            setenv("XCQ_USE_LEGACY", "1", 1)
-        } else {
-            setenv("XCQ_USE_GRAPHQLSWIFT", "1", 1)
-        }
-        if compareEngines { setenv("XCQ_COMPARE_ENGINES", "1", 1) }
-
         let session = try XcodeProjectQuerySession(projectPath: projectPath)
 
         let env = ProcessInfo.processInfo.environment

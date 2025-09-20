@@ -18,32 +18,8 @@ public class XcodeProjectQuery {
         guard !trimmed.hasPrefix("{") else {
             throw Error.invalidQuery("Top-level braces are not supported. Write selection only, e.g., targets { name type }")
         }
-        func envEquals(_ key: String, _ val: String) -> Bool {
-            if let cstr = getenv(key) { return String(cString: cstr) == val }
-            return false
-        }
-        let useGQLSwift = envEquals("XCQ_USE_GRAPHQLSWIFT", "1")
-        let compareEngines = envEquals("XCQ_COMPARE_ENGINES", "1")
-
-        if useGQLSwift {
-            let value = try evaluateWithGraphQLSwift(selection: trimmed)
-            return AnyEncodable(value)
-        }
-
-        let proj = try XcodeProj(pathString: projectPath)
-        let executor = GraphQLExecutor(project: proj, projectPath: projectPath)
-        let legacy = try GraphQL.parseAndExecute(query: trimmed, with: executor)
-
-        if compareEngines {
-            if let swiftValue = try? evaluateWithGraphQLSwift(selection: trimmed) {
-                if swiftValue != legacy {
-                    // Best-effort diagnostic to stderr without breaking CLI
-                    let diag = "[xcq] GraphQL parity mismatch for selection: \(trimmed)"
-                    FileHandle.standardError.write((diag + "\n").data(using: .utf8)!)
-                }
-            }
-        }
-        return AnyEncodable(legacy)
+        let value = try evaluateWithGraphQLSwift(selection: trimmed)
+        return AnyEncodable(value)
     }
 
     // MARK: - GraphQLSwift execution path
@@ -55,6 +31,10 @@ public class XcodeProjectQuery {
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let result = try graphql(schema: schema, request: request, context: ctx, eventLoopGroup: group).wait()
+        if !result.errors.isEmpty {
+            let msg = result.errors.map { $0.message }.joined(separator: "; ")
+            throw NSError(domain: "GraphQL", code: 1, userInfo: [NSLocalizedDescriptionKey: msg])
+        }
         guard let data = result.data else { return .object([:]) }
         return JSONValue(fromMap: data)
     }

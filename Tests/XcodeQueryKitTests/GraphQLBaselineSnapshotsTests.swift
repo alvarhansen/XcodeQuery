@@ -8,11 +8,11 @@ final class GraphQLBaselineSnapshotsTests: XCTestCase {
     }
 
     func testGraphQLOperatorSnapshots() throws {
-        let query = """
-        targetSources(pathMode: NORMALIZED, filter: { path: { prefix: \"Shared/\" } }) { target path }
-        targetResources(filter: { path: { suffix: \"json\" } }) { target path }
-        targetDependencies(filter: { name: { prefix: \"A\" } }) { target name type }
-        """
+        let query = #"""
+        targetSources(pathMode: NORMALIZED, filter: { path: { prefix: "Shared/" } }) { target path }
+        targetResources(filter: { path: { suffix: "json" } }) { target path }
+        targetDependencies(filter: { name: { prefix: "A" } }) { target name type }
+        """#
         let fixture = try GraphQLBaselineFixture()
         var json = try fixture.evaluateToCanonicalJSON(query: query)
         // Normalize escaped slashes to match snapshot formatting
@@ -34,10 +34,10 @@ final class GraphQLBaselineSnapshotsTests: XCTestCase {
     }
 
     func testRegexFiltersSnapshots() throws {
-        let query = """
+        let query = #"""
         targetSources(pathMode: NORMALIZED, filter: { path: { regex: "\\.swift$" } }) { target path }
         targetResources(filter: { path: { regex: "json$" } }) { target path }
-        """
+        """#
         let fixture = try GraphQLBaselineFixture()
         var json = try fixture.evaluateToCanonicalJSON(query: query)
         json = json.replacingOccurrences(of: "\\/", with: "/")
@@ -56,7 +56,7 @@ final class GraphQLBaselineSnapshotsTests: XCTestCase {
         let cases: [SnapshotCase] = [
             SnapshotCase(
                 name: "baseline",
-                query: """
+                query: #"""
                 targets {
                     name
                     type
@@ -65,32 +65,32 @@ final class GraphQLBaselineSnapshotsTests: XCTestCase {
                     resources { path }
                     buildScripts { name stage inputPaths outputPaths }
                 }
-                target(name: \"App\") {
+                target(name: "App") {
                     name
                     type
                     dependencies { name }
                 }
-                dependencies(name: \"App\", recursive: true) { name type }
-                dependents(name: \"Lib\", recursive: true) { name type }
+                dependencies(name: "App", recursive: true) { name type }
+                dependents(name: "Lib", recursive: true) { name type }
                 targetSources(pathMode: NORMALIZED) { target path }
                 targetResources(pathMode: NORMALIZED) { target path }
                 targetDependencies(recursive: true) { target name type }
                 targetBuildScripts { target name stage inputPaths outputPaths }
-                targetMembership(path: \"Shared/Shared.swift\", pathMode: NORMALIZED) { path targets }
-                """
+                targetMembership(path: "Shared/Shared.swift", pathMode: NORMALIZED) { path targets }
+                """#
             ),
             SnapshotCase(
                 name: "filters",
-                query: """
-                targets(filter: { name: { suffix: \"Tests\" } }) { name type }
+                query: #"""
+                targets(filter: { name: { suffix: "Tests" } }) { name type }
                 targets(type: UNIT_TEST) { name type }
-                targetSources(pathMode: NORMALIZED, filter: { target: { eq: \"App\" }, path: { contains: \"Shared\" } }) { target path }
-                targetResources(filter: { target: { eq: \"App\" } }) { target path }
+                targetSources(pathMode: NORMALIZED, filter: { target: { eq: "App" }, path: { contains: "Shared" } }) { target path }
+                targetResources(filter: { target: { eq: "App" } }) { target path }
                 targetBuildScripts(filter: { stage: PRE }) { target name stage inputPaths }
-                dependencies(name: \"App\", filter: { type: FRAMEWORK }) { name type }
-                dependents(name: \"Lib\", filter: { type: APP }) { name type }
+                dependencies(name: "App", filter: { type: FRAMEWORK }) { name type }
+                dependents(name: "Lib", filter: { type: APP }) { name type }
                 targetDependencies(filter: { type: FRAMEWORK }) { target name type }
-                """
+                """#
             )
         ]
 
@@ -118,11 +118,11 @@ final class GraphQLBaselineSnapshotsTests: XCTestCase {
         let projectRoot = URL(fileURLWithPath: projectPath).deletingLastPathComponent().standardizedFileURL.path
 
         // Compose query with ABSOLUTE path modes + build script filter by name/target
-        let query = """
+        let query = #"""
         targetSources(pathMode: ABSOLUTE) { target path }
         targetResources(pathMode: ABSOLUTE) { target path }
-        targetBuildScripts(filter: { name: { prefix: \"Post\" }, target: { eq: \"App\" } }) { target name stage }
-        """
+        targetBuildScripts(filter: { name: { prefix: "Post" }, target: { eq: "App" } }) { target name stage }
+        """#
         var json = try fixture.evaluateToCanonicalJSON(query: query)
         // Mask project root to make snapshot stable across temp dirs (handle both raw and escaped slashes)
         let escapedRoot = projectRoot.replacingOccurrences(of: "/", with: "\\/")

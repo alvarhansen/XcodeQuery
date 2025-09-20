@@ -60,7 +60,7 @@ final class GraphQLQueryTests: XCTestCase {
         struct Src: Decodable { let path: String }
         struct TS: Decodable { let name: String; let sources: [Src] }
         struct SOut: Decodable { let targets: [TS] }
-        let anySrc = try qp.evaluate(query: #"targets(type: FRAMEWORK) { name sources(pathMode: NORMALIZED, filter: { path: { regex: "\.swift$" } }) { path } }"#)
+        let anySrc = try qp.evaluate(query: #"targets(type: FRAMEWORK) { name sources(pathMode: NORMALIZED, filter: { path: { regex: "\\.swift$" } }) { path } }"#)
         let src = try JSONDecoder().decode(SOut.self, from: JSONEncoder().encode(anySrc))
         XCTAssertTrue(src.targets.flatMap { $0.sources }.contains { $0.path.contains("LibFile.swift") })
     }
@@ -74,3 +74,4 @@ private enum Temporary {
         return TempDir(url: url)
     }
 }
+
