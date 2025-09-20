@@ -57,19 +57,26 @@ Top-level fields (selection required):
   - `targetDependencies(recursive: Boolean = false, filter: TargetFilter): [TargetDependency!]!`
   - `targetBuildScripts(filter: BuildScriptFilter): [TargetBuildScript!]!`
   - `targetMembership(path: String!, pathMode: PathMode = FILE_REF): TargetMembership!`
+  - `buildConfigurations: [String!]!`
+  - `projectBuildSettings(filter: ProjectBuildSettingFilter): [ProjectBuildSetting!]!`
+  - `targetBuildSettings(scope: BuildSettingsScope = TARGET_ONLY, filter: BuildSettingFilter): [TargetBuildSetting!]!`
 
 Types and inputs:
-- `type Target { name, type, dependencies(recursive, filter), sources(pathMode, filter), resources(pathMode, filter), buildScripts(filter) }`
+- `type Target { name, type, dependencies(recursive, filter), sources(pathMode, filter), resources(pathMode, filter), buildScripts(filter), buildSettings(scope, filter) }`
 - `type BuildScript { name, stage, inputPaths, outputPaths, inputFileListPaths, outputFileListPaths }`
 - Views: `TargetSource { target, path }`, `TargetResource { target, path }`, `TargetDependency { target, name, type }`, `TargetBuildScript { target, ... }`, `TargetMembership { path, targets }`
 - `enum TargetType { APP, FRAMEWORK, STATIC_LIBRARY, DYNAMIC_LIBRARY, UNIT_TEST, UI_TEST, EXTENSION, BUNDLE, COMMAND_LINE_TOOL, WATCH_APP, WATCH2_APP, TV_APP, OTHER }`
 - `enum PathMode { FILE_REF, ABSOLUTE, NORMALIZED }`
 - `enum ScriptStage { PRE, POST }`
+- `enum BuildSettingsScope { PROJECT_ONLY, TARGET_ONLY, MERGED }`
+- `enum BuildSettingOrigin { PROJECT, TARGET }`
 - Filters:
   - `input TargetFilter { name: StringMatch, type: TargetType }`
   - `input SourceFilter { path: StringMatch, target: StringMatch }`
   - `input ResourceFilter { path: StringMatch, target: StringMatch }`
   - `input BuildScriptFilter { stage: ScriptStage, name: StringMatch, target: StringMatch }`
+  - `input ProjectBuildSettingFilter { key: StringMatch, configuration: StringMatch }`
+  - `input BuildSettingFilter { key: StringMatch, configuration: StringMatch, target: StringMatch }`
   - `input StringMatch { eq: String, regex: String, prefix: String, suffix: String, contains: String }`
 
 ## Examples
@@ -111,6 +118,16 @@ Types and inputs:
 
 - Target membership for a file
   - `xcq 'targetMembership(path: "Shared/Shared.swift", pathMode: NORMALIZED) { path targets }'`
+
+- Build settings
+  - List configuration names:
+    - `xcq 'buildConfigurations'`
+  - Project-only SWIFT keys across all configs:
+    - `xcq 'projectBuildSettings(filter: { key: { prefix: "SWIFT" } }) { configuration key value values isArray }'`
+  - Flat per-target build settings (Release CODE_SIGN keys):
+    - `xcq 'targetBuildSettings(filter: { configuration: { eq: "Release" }, key: { prefix: "CODE_SIGN" } }) { target configuration key value origin }'`
+  - Nested per-target (merged App SWIFT values for Debug):
+    - `xcq 'target(name: "App") { buildSettings(scope: MERGED, filter: { configuration: { eq: "Debug" }, key: { prefix: "SWIFT" } }) { configuration key value values isArray origin } }'`
 
 ## jq Recipes
 

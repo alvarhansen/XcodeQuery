@@ -17,9 +17,13 @@ Top-level Fields (selection required)
 - `targetDependencies(recursive: Boolean = false, filter: TargetFilter): [TargetDependency!]!`
 - `targetBuildScripts(filter: BuildScriptFilter): [TargetBuildScript!]!`
 - `targetMembership(path: String!, pathMode: PathMode = FILE_REF): TargetMembership!`
+- `buildConfigurations: [String!]!`
+- `projectBuildSettings(filter: ProjectBuildSettingFilter): [ProjectBuildSetting!]!`
+- `targetBuildSettings(scope: BuildSettingsScope = TARGET_ONLY, filter: BuildSettingFilter): [TargetBuildSetting!]!`
 
 Object Types
 - `type Target { name: String!, type: TargetType!, dependencies(recursive: Boolean = false, filter: TargetFilter): [Target!]!, sources(pathMode: PathMode = FILE_REF, filter: SourceFilter): [Source!]!, resources(pathMode: PathMode = FILE_REF, filter: ResourceFilter): [Resource!]!, buildScripts(filter: BuildScriptFilter): [BuildScript!]! }`
+- `type Target { ... buildSettings(scope: BuildSettingsScope = TARGET_ONLY, filter: BuildSettingFilter): [BuildSetting!]! }`
 - `type Source { path: String! }`
 - `type Resource { path: String! }`
 - `type BuildScript { name: String, stage: ScriptStage!, inputPaths: [String!]!, outputPaths: [String!]!, inputFileListPaths: [String!]!, outputFileListPaths: [String!]! }`
@@ -28,11 +32,16 @@ Object Types
 - `type TargetDependency { target: String!, name: String!, type: TargetType! }`
 - `type TargetBuildScript { target: String!, name: String, stage: ScriptStage!, inputPaths: [String!]!, outputPaths: [String!]!, inputFileListPaths: [String!]!, outputFileListPaths: [String!]! }`
 - `type TargetMembership { path: String!, targets: [String!]! }`
+- `type ProjectBuildSetting { configuration: String!, key: String!, value: String, values: [String!], isArray: Boolean! }`
+- `type TargetBuildSetting { target: String!, configuration: String!, key: String!, value: String, values: [String!], isArray: Boolean!, origin: BuildSettingOrigin! }`
+- `type BuildSetting { configuration: String!, key: String!, value: String, values: [String!], isArray: Boolean!, origin: BuildSettingOrigin! }`
 
 Enums
 - `enum TargetType (APP, FRAMEWORK, STATIC_LIBRARY, DYNAMIC_LIBRARY, UNIT_TEST, UI_TEST, EXTENSION, BUNDLE, COMMAND_LINE_TOOL, WATCH_APP, WATCH2_APP, TV_APP, OTHER)`
 - `enum PathMode (FILE_REF, ABSOLUTE, NORMALIZED)`
 - `enum ScriptStage (PRE, POST)`
+- `enum BuildSettingsScope (PROJECT_ONLY, TARGET_ONLY, MERGED)`
+- `enum BuildSettingOrigin (PROJECT, TARGET)`
 
 Input Objects (filters)
 - `input StringMatch { eq: String, regex: String, prefix: String, suffix: String, contains: String }`
@@ -40,6 +49,8 @@ Input Objects (filters)
 - `input SourceFilter { path: StringMatch, target: StringMatch }`
 - `input ResourceFilter { path: StringMatch, target: StringMatch }`
 - `input BuildScriptFilter { stage: ScriptStage, name: StringMatch, target: StringMatch }`
+- `input ProjectBuildSettingFilter { key: StringMatch, configuration: StringMatch }`
+- `input BuildSettingFilter { key: StringMatch, configuration: StringMatch, target: StringMatch }`
 
 Behavioral Notes & Quirks
 - No top-level braces: queries must start with a field (e.g., `targets { name }`). Using `{ ... }` yields `Top-level braces are not supported. Write selection only, e.g., targets { name type }`.
@@ -54,6 +65,7 @@ Behavioral Notes & Quirks
 - Argument defaults:
   - `recursive: false` for dependency-related fields.
   - `pathMode: FILE_REF` for source/resource fields and flat views.
+  - `scope: TARGET_ONLY` for build settings fields (`targetBuildSettings` and `Target.buildSettings`).
 - Path modes:
   - `FILE_REF`: raw PBX file reference path/name.
   - `ABSOLUTE`: standardized absolute paths.
@@ -69,6 +81,10 @@ Representative Examples
 - `targetSources(pathMode: NORMALIZED) { target path }`
 - `targetBuildScripts(filter: { stage: PRE }) { target name stage }`
 - `targetMembership(path: "Shared/Shared.swift", pathMode: NORMALIZED) { path targets }`
+- `buildConfigurations`
+- `projectBuildSettings(filter: { key: { contains: "SWIFT" } }) { configuration key values }`
+- `targetBuildSettings(filter: { configuration: { eq: "Release" }, key: { prefix: "CODE_SIGN" } }) { target configuration key value origin }`
+- `target(name: "App") { buildSettings(scope: MERGED, filter: { configuration: { eq: "Debug" } }) { configuration key value values origin } }`
 
 Testing Artifacts
 - Golden JSON snapshots for representative queries: `Tests/XcodeQueryKitTests/Snapshots/GraphQLBaseline/*`.
@@ -76,3 +92,8 @@ Testing Artifacts
 
 Provenance
 - This schema mirrors the GraphQLSwift runtime schema (`Sources/XcodeQueryKit/GraphQLSwiftSchema.swift`) and is used by the CLI via an adapter (`XQSchemaBuilder`).
+- Build settings specifics:
+  - All configurations are included by default; use `filter.configuration` to narrow.
+  - `targetBuildSettings.scope` and `Target.buildSettings.scope` select `PROJECT_ONLY`, `TARGET_ONLY`, or `MERGED` (target overrides project per key).
+  - `origin` reflects where the effective value came from: `PROJECT` or `TARGET`.
+  - Sorting: for flat target build settings → by `target`, then `configuration`, then `key`; for nested target build settings → by `configuration`, then `key`; project build settings → by `configuration`, then `key`.
