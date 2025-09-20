@@ -26,7 +26,8 @@ jobs:
       - name: Compute asset sha256
         id: sha
         run: |
-          curl -L "${{ steps.prep.outputs.asset_url }}" -o xcq.zip
+          # Retry until the release asset is available to avoid race with the release job
+          curl -fL --retry 30 --retry-delay 5 --retry-all-errors "${{ steps.prep.outputs.asset_url }}" -o xcq.zip
           SHASUM=$(shasum -a 256 xcq.zip | awk '{print $1}')
           echo "sha=$SHASUM" >> $GITHUB_OUTPUT
 
