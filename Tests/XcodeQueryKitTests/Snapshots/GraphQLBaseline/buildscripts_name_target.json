@@ -1,0 +1,9 @@
+{
+  "targetBuildScripts" : [
+    {
+      "name" : "Pre Script",
+      "stage" : "PRE",
+      "target" : "App"
+    }
+  ]
+}

@@ -20,6 +20,19 @@ final class GraphQLBaselineSnapshotsTests: XCTestCase {
         try GraphQLSnapshot.assertSnapshot(data: json, named: "operators", subdirectory: "GraphQLBaseline")
     }
 
+    func testBuildScriptFilterSnapshots() throws {
+        struct Case { let name: String; let query: String }
+        let cases: [Case] = [
+            Case(name: "buildscripts_pre", query: "targetBuildScripts(filter: { stage: PRE }) { target name stage }"),
+            Case(name: "buildscripts_name_target", query: "targetBuildScripts(filter: { name: { contains: \"Pre\" }, target: { eq: \"App\" } }) { target name stage }")
+        ]
+        let fixture = try GraphQLBaselineFixture()
+        for c in cases {
+            let json = try fixture.evaluateToCanonicalJSON(query: c.query)
+            try GraphQLSnapshot.assertSnapshot(data: json, named: c.name, subdirectory: "GraphQLBaseline")
+        }
+    }
+
     @MainActor
     func testGraphQLBaselineSnapshots() throws {
         let cases: [SnapshotCase] = [

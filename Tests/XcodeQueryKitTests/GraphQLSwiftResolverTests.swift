@@ -739,4 +739,26 @@ final class GraphQLSwiftResolverTests: XCTestCase {
             for v in arr { XCTAssertTrue((v.dictionary?["name"]?.string ?? "").contains("ib")) }
         }
     }
+
+    func testTargetDependenciesFilterByNameRegex() throws {
+        let fixture = try GraphQLBaselineFixture()
+        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+        let ctx: XQGQLContext = try {
+            let mirror = Mirror(reflecting: fixture)
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 178, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            let m = Mirror(reflecting: qp)
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 179, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            let proj = try XcodeProj(pathString: projectPath)
+            return XQGQLContext(project: proj, projectPath: projectPath)
+        }()
+
+        // Regex ^Lib$ should match only 'Lib'
+        let q = #"{ targetDependencies(filter: { name: { regex: "^Lib$" } }) { target name } }"#
+        let result = try graphql(schema: schema, request: q, context: ctx, eventLoopGroup: group).wait()
+        let arr = result.data?.dictionary?["targetDependencies"]?.array ?? []
+        XCTAssertTrue(arr.contains { v in v.dictionary?["target"]?.string == "App" && v.dictionary?["name"]?.string == "Lib" })
+        for v in arr { XCTAssertEqual(v.dictionary?["name"]?.string, "Lib") }
+    }
 }
