@@ -1,4 +1,4 @@
-// swift-tools-version: 6.1
+// swift-tools-version: 6.2
 
 import PackageDescription
 
@@ -43,6 +43,10 @@ let package = Package(
                 .target(name: "XcodeQueryCLI"),
                 .product(name: "XcodeGenKit", package: "XcodeGen"),
                 .product(name: "ProjectSpec", package: "XcodeGen"),
+            ],
+            resources: [
+                // Include snapshot baselines used by tests
+                .process("Snapshots")
             ]
         ),
     ]
