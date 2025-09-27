@@ -54,6 +54,7 @@ Top-level fields (selection required):
 - Flat views:
   - `targetSources(pathMode: PathMode = FILE_REF, filter: SourceFilter): [TargetSource!]!`
   - `targetResources(pathMode: PathMode = FILE_REF, filter: ResourceFilter): [TargetResource!]!`
+  - `schemes(filter: SchemeFilter): [Scheme!]!`
   - `targetLinkDependencies(filter: LinkFilter): [TargetLinkDependency!]!`
   - `targetDependencies(recursive: Boolean = false, filter: TargetFilter): [TargetDependency!]!`
   - `targetBuildScripts(filter: BuildScriptFilter): [TargetBuildScript!]!`
@@ -67,6 +68,7 @@ Top-level fields (selection required):
 
 Types and inputs:
 - `type Target { name, type, dependencies(recursive, filter), sources(pathMode, filter), resources(pathMode, filter), linkDependencies(pathMode, filter), buildScripts(filter), buildSettings(scope, filter) }`
+- `type Scheme { name, isShared, buildTargets { name }, testTargets { name }, runTarget { name } }`
 - `type BuildScript { name, stage, inputPaths, outputPaths, inputFileListPaths, outputFileListPaths }`
 - Views: `TargetSource { target, path }`, `TargetResource { target, path }`, `TargetDependency { target, name, type }`, `TargetLinkDependency { target, name, kind, path, embed, weak }`, `TargetBuildScript { target, ... }`, `TargetMembership { path, targets }`
 - `enum TargetType { APP, FRAMEWORK, STATIC_LIBRARY, DYNAMIC_LIBRARY, UNIT_TEST, UI_TEST, EXTENSION, BUNDLE, COMMAND_LINE_TOOL, WATCH_APP, WATCH2_APP, TV_APP, OTHER }`
@@ -87,8 +89,9 @@ Types and inputs:
   - `input StringMatch { eq: String, regex: String, prefix: String, suffix: String, contains: String }`
   - `input SwiftPackageFilter { name: StringMatch, identity: StringMatch, url: StringMatch, product: StringMatch, consumerTarget: StringMatch }`
   - `input PackageProductFilter { name: StringMatch }`
-  - `input PackageProductUsageFilter { target: StringMatch, package: StringMatch, product: StringMatch }`
+ - `input PackageProductUsageFilter { target: StringMatch, package: StringMatch, product: StringMatch }`
   - `input LinkFilter { name: StringMatch, kind: LinkKind, target: StringMatch }`
+  - `input SchemeFilter { name: StringMatch, includesTarget: StringMatch }`
 
 Swift Packages types:
 - `type SwiftPackage { name, identity, url, requirement { kind, value }, products { name, type }, consumers { target, product } }`
@@ -146,6 +149,14 @@ Swift Packages types:
     - `xcq 'target(name: "App") { linkDependencies(pathMode: NORMALIZED) { name kind path embed weak } }'`
   - Flat view for piping and filters:
     - `xcq 'targetLinkDependencies(filter: { kind: FRAMEWORK }) { target name kind embed }'`
+
+- Schemes
+  - List schemes with actions:
+    - `xcq 'schemes { name isShared buildTargets { name } testTargets { name } runTarget { name } }'`
+  - Filter by name prefix:
+    - `xcq 'schemes(filter: { name: { prefix: "App" } }) { name }'`
+  - Filter schemes that include a target:
+    - `xcq 'schemes(filter: { includesTarget: { eq: "App" } }) { name }'`
 
 - Target membership for a file
   - `xcq 'targetMembership(path: "Shared/Shared.swift", pathMode: NORMALIZED) { path targets }'`

@@ -23,6 +23,9 @@ struct GFlatBuildScript { let target: String; let bs: BuildScriptEntry }
 // Link dependencies wrappers
 struct GLinkDependency { let name: String; let kind: String; let path: String?; let embed: Bool; let weak: Bool }
 struct GFlatLinkDependency { let target: String; let name: String; let kind: String; let path: String?; let embed: Bool; let weak: Bool }
+// Schemes wrappers
+struct GScheme { let name: String; let isShared: Bool; let buildTargets: [String]; let testTargets: [String]; let runTarget: String? }
+struct GSchemeRef { let name: String }
 struct GMembership { let path: String; let targets: [String] }
 struct GProjectBuildSetting { let configuration: String; let key: String; let value: String?; let values: [String]?; let isArray: Bool }
 struct GTargetBuildSetting { let target: String; let configuration: String; let key: String; let value: String?; let values: [String]?; let isArray: Bool; let origin: String }
@@ -162,6 +165,38 @@ enum XQResolvers {
             }
         }
         rows.sort { $0.target == $1.target ? $0.path < $1.path : $0.target < $1.target }
+        return rows
+    }
+
+    static func resolveSchemes(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
+        let ctx = try expectCtx(context)
+        var rows: [GScheme] = []
+        if let shared = ctx.project.sharedData?.schemes {
+            for s in shared {
+                let bts = s.buildAction?.buildActionEntries.map { $0.buildableReference.blueprintName } ?? []
+                let tts = s.testAction?.testables.map { $0.buildableReference.blueprintName } ?? []
+                let run = s.launchAction?.runnable?.buildableReference?.blueprintName ?? s.launchAction?.macroExpansion?.blueprintName
+                rows.append(GScheme(name: s.name, isShared: true, buildTargets: bts, testTargets: tts, runTarget: run))
+            }
+        }
+        // Filtering
+        if let filter = args["filter"].dictionary {
+            rows = rows.filter { sc in
+                for (k, v) in filter {
+                    if v.isUndefined || v.isNull { continue }
+                    switch k {
+                    case "name": if !matchString(sc.name, value: v) { return false }
+                    case "includesTarget":
+                        let names = Set(sc.buildTargets + sc.testTargets + (sc.runTarget.map { [$0] } ?? []))
+                        // match if any included target matches StringMatch
+                        if !names.contains(where: { matchString($0, value: v) }) { return false }
+                    default: return false
+                    }
+                }
+                return true
+            }
+        }
+        rows.sort { $0.name < $1.name }
         return rows
     }
 
@@ -1075,6 +1110,23 @@ extension XQResolvers {
     static func resolveFlatLink_path(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GFlatLinkDependency.self).path }
     static func resolveFlatLink_embed(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GFlatLinkDependency.self).embed }
     static func resolveFlatLink_weak(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GFlatLinkDependency.self).weak }
+
+    // Schemes leaf resolvers
+    static func resolveScheme_name(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GScheme.self).name }
+    static func resolveScheme_isShared(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GScheme.self).isShared }
+    static func resolveScheme_buildTargets(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
+        let s = try expect(source, as: GScheme.self)
+        return s.buildTargets.map(GSchemeRef.init(name:))
+    }
+    static func resolveScheme_testTargets(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
+        let s = try expect(source, as: GScheme.self)
+        return s.testTargets.map(GSchemeRef.init(name:))
+    }
+    static func resolveScheme_runTarget(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
+        let s = try expect(source, as: GScheme.self)
+        return s.runTarget.map(GSchemeRef.init(name:))
+    }
+    static func resolveSchemeRef_name(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GSchemeRef.self).name }
 }
 
 // MARK: - Enum mapping (duplicate minimal mapping for adapters)

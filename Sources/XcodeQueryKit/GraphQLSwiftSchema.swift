@@ -94,6 +94,11 @@ enum XQGraphQLSwiftSchema {
             "name": InputObjectField(type: stringMatch),
             "target": InputObjectField(type: stringMatch),
         ])
+        // Schemes filter
+        let schemeFilter = try GraphQLInputObjectType(name: "SchemeFilter", fields: [
+            "name": InputObjectField(type: stringMatch),
+            "includesTarget": InputObjectField(type: stringMatch),
+        ])
         // Link dependencies filter
         let linkFilter = try GraphQLInputObjectType(name: "LinkFilter", fields: [
             "name": InputObjectField(type: stringMatch),
@@ -130,6 +135,17 @@ enum XQGraphQLSwiftSchema {
         ])
         let resource = try GraphQLObjectType(name: "Resource", fields: [
             "path": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveResource_path)
+        ])
+        // Schemes types
+        let schemeRef = try GraphQLObjectType(name: "SchemeRef", fields: [
+            "name": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveSchemeRef_name)
+        ])
+        let scheme = try GraphQLObjectType(name: "Scheme", fields: [
+            "name": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveScheme_name),
+            "isShared": GraphQLField(type: GraphQLNonNull(boolean), resolve: XQResolvers.resolveScheme_isShared),
+            "buildTargets": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(schemeRef))), resolve: XQResolvers.resolveScheme_buildTargets),
+            "testTargets": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(schemeRef))), resolve: XQResolvers.resolveScheme_testTargets),
+            "runTarget": GraphQLField(type: schemeRef, resolve: XQResolvers.resolveScheme_runTarget)
         ])
         let linkDependency = try GraphQLObjectType(name: "LinkDependency", fields: [
             "name": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveLinkDependency_name),
@@ -362,6 +378,11 @@ enum XQGraphQLSwiftSchema {
                     "filter": GraphQLArgument(type: resourceFilter)
                 ],
                 resolve: XQResolvers.resolveTargetResources
+            ),
+            "schemes": GraphQLField(
+                type: GraphQLNonNull(GraphQLList(GraphQLNonNull(scheme))),
+                args: ["filter": GraphQLArgument(type: schemeFilter)],
+                resolve: XQResolvers.resolveSchemes
             ),
             "targetLinkDependencies": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(targetLinkDependency))),
