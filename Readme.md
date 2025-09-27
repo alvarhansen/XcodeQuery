@@ -54,6 +54,7 @@ Top-level fields (selection required):
 - Flat views:
   - `targetSources(pathMode: PathMode = FILE_REF, filter: SourceFilter): [TargetSource!]!`
   - `targetResources(pathMode: PathMode = FILE_REF, filter: ResourceFilter): [TargetResource!]!`
+  - `targetLinkDependencies(filter: LinkFilter): [TargetLinkDependency!]!`
   - `targetDependencies(recursive: Boolean = false, filter: TargetFilter): [TargetDependency!]!`
   - `targetBuildScripts(filter: BuildScriptFilter): [TargetBuildScript!]!`
   - `targetMembership(path: String!, pathMode: PathMode = FILE_REF): TargetMembership!`
@@ -65,9 +66,9 @@ Top-level fields (selection required):
     - `targetPackageProducts(filter: PackageProductUsageFilter): [PackageProductUsage!]!`
 
 Types and inputs:
-- `type Target { name, type, dependencies(recursive, filter), sources(pathMode, filter), resources(pathMode, filter), buildScripts(filter), buildSettings(scope, filter) }`
+- `type Target { name, type, dependencies(recursive, filter), sources(pathMode, filter), resources(pathMode, filter), linkDependencies(pathMode, filter), buildScripts(filter), buildSettings(scope, filter) }`
 - `type BuildScript { name, stage, inputPaths, outputPaths, inputFileListPaths, outputFileListPaths }`
-- Views: `TargetSource { target, path }`, `TargetResource { target, path }`, `TargetDependency { target, name, type }`, `TargetBuildScript { target, ... }`, `TargetMembership { path, targets }`
+- Views: `TargetSource { target, path }`, `TargetResource { target, path }`, `TargetDependency { target, name, type }`, `TargetLinkDependency { target, name, kind, path, embed, weak }`, `TargetBuildScript { target, ... }`, `TargetMembership { path, targets }`
 - `enum TargetType { APP, FRAMEWORK, STATIC_LIBRARY, DYNAMIC_LIBRARY, UNIT_TEST, UI_TEST, EXTENSION, BUNDLE, COMMAND_LINE_TOOL, WATCH_APP, WATCH2_APP, TV_APP, OTHER }`
 - `enum PathMode { FILE_REF, ABSOLUTE, NORMALIZED }`
 - `enum ScriptStage { PRE, POST }`
@@ -75,6 +76,7 @@ Types and inputs:
 - `enum BuildSettingOrigin { PROJECT, TARGET }`
  - `enum RequirementKind { EXACT, RANGE, UP_TO_NEXT_MAJOR, UP_TO_NEXT_MINOR, BRANCH, REVISION }`
  - `enum PackageProductType { LIBRARY, EXECUTABLE, PLUGIN, OTHER }`
+ - `enum LinkKind { FRAMEWORK, LIBRARY, SDK_FRAMEWORK, SDK_LIBRARY, PACKAGE_PRODUCT, OTHER }`
 - Filters:
   - `input TargetFilter { name: StringMatch, type: TargetType }`
   - `input SourceFilter { path: StringMatch, target: StringMatch }`
@@ -86,6 +88,7 @@ Types and inputs:
   - `input SwiftPackageFilter { name: StringMatch, identity: StringMatch, url: StringMatch, product: StringMatch, consumerTarget: StringMatch }`
   - `input PackageProductFilter { name: StringMatch }`
   - `input PackageProductUsageFilter { target: StringMatch, package: StringMatch, product: StringMatch }`
+  - `input LinkFilter { name: StringMatch, kind: LinkKind, target: StringMatch }`
 
 Swift Packages types:
 - `type SwiftPackage { name, identity, url, requirement { kind, value }, products { name, type }, consumers { target, product } }`
@@ -137,6 +140,12 @@ Swift Packages types:
     - `xcq 'targetPackageProducts { target packageName productName }'`
   - Filter packages by consumer target:
     - `xcq 'swiftPackages(filter: { consumerTarget: { eq: "App" } }) { name products { name } }'`
+
+- Linker inputs (frameworks/libraries/package products)
+  - Per-target, include embed/weak flags:
+    - `xcq 'target(name: "App") { linkDependencies(pathMode: NORMALIZED) { name kind path embed weak } }'`
+  - Flat view for piping and filters:
+    - `xcq 'targetLinkDependencies(filter: { kind: FRAMEWORK }) { target name kind embed }'`
 
 - Target membership for a file
   - `xcq 'targetMembership(path: "Shared/Shared.swift", pathMode: NORMALIZED) { path targets }'`

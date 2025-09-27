@@ -34,6 +34,15 @@ enum XQGraphQLSwiftSchema {
             "PRE": GraphQLEnumValue(value: Map("PRE")),
             "POST": GraphQLEnumValue(value: Map("POST")),
         ])
+        // Linker dependencies enums
+        let linkKind = try GraphQLEnumType(name: "LinkKind", values: [
+            "FRAMEWORK": GraphQLEnumValue(value: Map("FRAMEWORK")),
+            "LIBRARY": GraphQLEnumValue(value: Map("LIBRARY")),
+            "SDK_FRAMEWORK": GraphQLEnumValue(value: Map("SDK_FRAMEWORK")),
+            "SDK_LIBRARY": GraphQLEnumValue(value: Map("SDK_LIBRARY")),
+            "PACKAGE_PRODUCT": GraphQLEnumValue(value: Map("PACKAGE_PRODUCT")),
+            "OTHER": GraphQLEnumValue(value: Map("OTHER")),
+        ])
         // Build settings enums
         let buildSettingsScope = try GraphQLEnumType(name: "BuildSettingsScope", values: [
             "PROJECT_ONLY": GraphQLEnumValue(value: Map("PROJECT_ONLY")),
@@ -85,6 +94,12 @@ enum XQGraphQLSwiftSchema {
             "name": InputObjectField(type: stringMatch),
             "target": InputObjectField(type: stringMatch),
         ])
+        // Link dependencies filter
+        let linkFilter = try GraphQLInputObjectType(name: "LinkFilter", fields: [
+            "name": InputObjectField(type: stringMatch),
+            "kind": InputObjectField(type: linkKind),
+            "target": InputObjectField(type: stringMatch),
+        ])
         // Build settings filter (used by Target.buildSettings and targetBuildSettings)
         let buildSettingFilter = try GraphQLInputObjectType(name: "BuildSettingFilter", fields: [
             "key": InputObjectField(type: stringMatch),
@@ -115,6 +130,13 @@ enum XQGraphQLSwiftSchema {
         ])
         let resource = try GraphQLObjectType(name: "Resource", fields: [
             "path": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveResource_path)
+        ])
+        let linkDependency = try GraphQLObjectType(name: "LinkDependency", fields: [
+            "name": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveLinkDependency_name),
+            "kind": GraphQLField(type: GraphQLNonNull(linkKind), resolve: XQResolvers.resolveLinkDependency_kind),
+            "path": GraphQLField(type: string, resolve: XQResolvers.resolveLinkDependency_path),
+            "embed": GraphQLField(type: GraphQLNonNull(boolean), resolve: XQResolvers.resolveLinkDependency_embed),
+            "weak": GraphQLField(type: GraphQLNonNull(boolean), resolve: XQResolvers.resolveLinkDependency_weak),
         ])
         let buildScript = try GraphQLObjectType(name: "BuildScript", fields: [
             "name": GraphQLField(type: string, resolve: XQResolvers.resolveBuildScript_name),
@@ -173,6 +195,14 @@ enum XQGraphQLSwiftSchema {
                     "filter": GraphQLArgument(type: targetFilter)
                 ]
             , resolve: XQResolvers.resolveTarget_dependencies),
+            "linkDependencies": GraphQLField(
+                type: GraphQLNonNull(GraphQLList(GraphQLNonNull(linkDependency))),
+                args: [
+                    "pathMode": GraphQLArgument(type: pathMode, defaultValue: Map("FILE_REF")),
+                    "filter": GraphQLArgument(type: linkFilter)
+                ],
+                resolve: XQResolvers.resolveTarget_linkDependencies
+            ),
             "sources": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(source))),
                 args: [
@@ -214,6 +244,14 @@ enum XQGraphQLSwiftSchema {
         let targetResource = try GraphQLObjectType(name: "TargetResource", fields: [
             "target": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveFlatResource_target),
             "path": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveFlatResource_path)
+        ])
+        let targetLinkDependency = try GraphQLObjectType(name: "TargetLinkDependency", fields: [
+            "target": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveFlatLink_target),
+            "name": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveFlatLink_name),
+            "kind": GraphQLField(type: GraphQLNonNull(linkKind), resolve: XQResolvers.resolveFlatLink_kind),
+            "path": GraphQLField(type: string, resolve: XQResolvers.resolveFlatLink_path),
+            "embed": GraphQLField(type: GraphQLNonNull(boolean), resolve: XQResolvers.resolveFlatLink_embed),
+            "weak": GraphQLField(type: GraphQLNonNull(boolean), resolve: XQResolvers.resolveFlatLink_weak),
         ])
         let targetDependency = try GraphQLObjectType(name: "TargetDependency", fields: [
             "target": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveFlatDependency_target),
@@ -324,6 +362,13 @@ enum XQGraphQLSwiftSchema {
                     "filter": GraphQLArgument(type: resourceFilter)
                 ],
                 resolve: XQResolvers.resolveTargetResources
+            ),
+            "targetLinkDependencies": GraphQLField(
+                type: GraphQLNonNull(GraphQLList(GraphQLNonNull(targetLinkDependency))),
+                args: [
+                    "filter": GraphQLArgument(type: linkFilter)
+                ],
+                resolve: XQResolvers.resolveTargetLinkDependencies
             ),
             "targetDependencies": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(targetDependency))),

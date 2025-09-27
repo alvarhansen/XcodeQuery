@@ -20,6 +20,9 @@ struct GFlatSource { let target: String; let path: String }
 struct GFlatResource { let target: String; let path: String }
 struct GFlatDependency { let target: String; let dep: PBXNativeTarget }
 struct GFlatBuildScript { let target: String; let bs: BuildScriptEntry }
+// Link dependencies wrappers
+struct GLinkDependency { let name: String; let kind: String; let path: String?; let embed: Bool; let weak: Bool }
+struct GFlatLinkDependency { let target: String; let name: String; let kind: String; let path: String?; let embed: Bool; let weak: Bool }
 struct GMembership { let path: String; let targets: [String] }
 struct GProjectBuildSetting { let configuration: String; let key: String; let value: String?; let values: [String]?; let isArray: Bool }
 struct GTargetBuildSetting { let target: String; let configuration: String; let key: String; let value: String?; let values: [String]?; let isArray: Bool; let origin: String }
@@ -162,6 +165,34 @@ enum XQResolvers {
         return rows
     }
 
+    static func resolveTargetLinkDependencies(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
+        let ctx = try expectCtx(context)
+        var rows: [GFlatLinkDependency] = []
+        for nt in ctx.project.pbxproj.nativeTargets {
+            let links = try linkDependencies(target: nt, mode: .fileRef, ctx: ctx)
+            for l in links { rows.append(GFlatLinkDependency(target: nt.name, name: l.name, kind: l.kind, path: l.path, embed: l.embed, weak: l.weak)) }
+        }
+        if let filter = args["filter"].dictionary {
+            rows = rows.filter { row in
+                for (k, v) in filter {
+                    if v.isUndefined || v.isNull { continue }
+                    switch k {
+                    case "name": if !matchString(row.name, value: v) { return false }
+                    case "kind": if let sym = v.string { if row.kind != sym { return false } } else { return false }
+                    case "target": if !matchString(row.target, value: v) { return false }
+                    default: return false
+                    }
+                }
+                return true
+            }
+        }
+        rows.sort { (a, b) in
+            if a.target != b.target { return a.target < b.target }
+            return a.name < b.name
+        }
+        return rows
+    }
+
     static func resolveTargetDependencies(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
         let ctx = try expectCtx(context)
         let recursive = args["recursive"].bool ?? false
@@ -300,6 +331,28 @@ enum XQResolvers {
             }
         }
         return paths.map(GResource.init(path:))
+    }
+    static func resolveTarget_linkDependencies(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
+        let t = try expect(source, as: GTarget.self)
+        let mode = parsePathMode(args["pathMode"]) ?? .fileRef
+        var list = try linkDependencies(target: t.nt, mode: mode, ctx: t.ctx)
+        if let filter = args["filter"].dictionary {
+            list = list.filter { row in
+                for (k, v) in filter {
+                    if v.isUndefined || v.isNull { continue }
+                    switch k {
+                    case "name": if !matchString(row.name, value: v) { return false }
+                    case "kind": if let sym = v.string { if row.kind != sym { return false } } else { return false }
+                    case "target": // ignore on nested context
+                        continue
+                    default: return false
+                    }
+                }
+                return true
+            }
+        }
+        list.sort { $0.name < $1.name }
+        return list
     }
     static func resolveTarget_buildScripts(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
         let t = try expect(source, as: GTarget.self)
@@ -536,6 +589,121 @@ enum XQResolvers {
             }
         }
         return results
+    }
+
+    // MARK: Link dependencies scanning
+    private static func linkDependencies(target nt: PBXNativeTarget, mode: PathMode, ctx: XQGQLContext) throws -> [GLinkDependency] {
+        var results: [GLinkDependency] = []
+        let projDirURL = URL(fileURLWithPath: ctx.projectPath).deletingLastPathComponent()
+        let projectRoot = projDirURL.path
+        let stdProjectRoot = URL(fileURLWithPath: projectRoot).standardizedFileURL.path
+
+        // Collect embedded framework names from copy files phases likely embedding frameworks
+        var embeddedNames = Set<String>()
+        for phase in nt.buildPhases.compactMap({ $0 as? PBXCopyFilesBuildPhase }) {
+            let nameLower = (phase.name ?? "").lowercased()
+            let looksLikeFrameworks = nameLower.contains("framework")
+            for bf in phase.files ?? [] {
+                if let fr = bf.file as? PBXFileReference {
+                    let nm = fr.name ?? fr.path ?? ""
+                    if nm.hasSuffix(".framework") || looksLikeFrameworks { embeddedNames.insert(nm) }
+                }
+            }
+        }
+
+        // Scan PBXFrameworksBuildPhase
+        var seen = Set<String>() // key: name + kind
+        for phase in nt.buildPhases.compactMap({ $0 as? PBXFrameworksBuildPhase }) {
+            for bf in phase.files ?? [] {
+                var name: String = ""
+                var pathStr: String? = nil
+                var kind: String = "OTHER"
+                var isWeak = false
+                if let attrs = bf.settings?["ATTRIBUTES"] as? [String], attrs.contains("Weak") { isWeak = true }
+
+                if let fr = bf.file as? PBXFileReference {
+                    let ref = fr.name ?? fr.path ?? ""
+                    name = ref
+                    let lower = ref.lowercased()
+                    let isFramework = lower.hasSuffix(".framework")
+                    let isLibrary = lower.hasSuffix(".a") || lower.hasSuffix(".dylib")
+                    let isSDK = isSDKFileRef(fr)
+                    if isFramework { kind = isSDK ? "SDK_FRAMEWORK" : "FRAMEWORK" }
+                    else if isLibrary { kind = isSDK ? "SDK_LIBRARY" : "LIBRARY" }
+                    else { kind = "OTHER" }
+                    if !isSDK {
+                        // Resolve path formatting
+                        switch mode {
+                        case .fileRef:
+                            pathStr = fr.path ?? fr.name
+                        case .absolute:
+                            if let fullStr = (try? fr.fullPath(sourceRoot: projectRoot)) ?? nil {
+                                pathStr = URL(fileURLWithPath: fullStr).standardizedFileURL.path
+                            } else if let refPath = fr.path, refPath.hasPrefix("/") {
+                                pathStr = URL(fileURLWithPath: refPath).standardizedFileURL.path
+                            } else {
+                                pathStr = projDirURL.appendingPathComponent(fr.path ?? fr.name ?? "").standardizedFileURL.path
+                            }
+                        case .normalized:
+                            if let fullStr = (try? fr.fullPath(sourceRoot: projectRoot)) ?? nil {
+                                let stdFull = URL(fileURLWithPath: fullStr).standardizedFileURL.path
+                                if stdFull.hasPrefix(stdProjectRoot + "/") {
+                                    pathStr = String(stdFull.dropFirst(stdProjectRoot.count + 1))
+                                } else { pathStr = stdFull }
+                            } else if let refPath = fr.path, refPath.hasPrefix("/") {
+                                let stdRef = URL(fileURLWithPath: refPath).standardizedFileURL.path
+                                if stdRef.hasPrefix(stdProjectRoot + "/") {
+                                    pathStr = String(stdRef.dropFirst(stdProjectRoot.count + 1))
+                                } else { pathStr = stdRef }
+                            } else {
+                                let refPath = fr.path ?? fr.name ?? ""
+                                let rel = URL(fileURLWithPath: refPath, relativeTo: projDirURL).standardizedFileURL.path
+                                if rel.hasPrefix(stdProjectRoot + "/") {
+                                    pathStr = String(rel.dropFirst(stdProjectRoot.count + 1))
+                                } else { pathStr = refPath }
+                            }
+                        }
+                    }
+                } else {
+                    if let pn = bf.settings?["PRODUCT_NAME"] as? String { name = pn }
+                }
+
+                let key = "\(name)||\(kind)"
+                let embedded = embeddedNames.contains(name)
+                if !name.isEmpty && !seen.contains(key) {
+                    results.append(GLinkDependency(name: name, kind: kind, path: pathStr, embed: embedded, weak: isWeak))
+                    seen.insert(key)
+                } else if let idx = results.firstIndex(where: { $0.name == name && $0.kind == kind }) {
+                    let prior = results[idx]
+                    results[idx] = GLinkDependency(name: prior.name, kind: prior.kind, path: prior.path ?? pathStr, embed: prior.embed || embedded, weak: prior.weak || isWeak)
+                }
+            }
+        }
+
+        // Add package product dependencies
+        if let deps = nt.packageProductDependencies {
+            for d in deps {
+                let pname = d.productName
+                let key = "\(pname)||PACKAGE_PRODUCT"
+                if !seen.contains(key) {
+                    results.append(GLinkDependency(name: pname, kind: "PACKAGE_PRODUCT", path: nil, embed: false, weak: false))
+                }
+            }
+        }
+
+        return results
+    }
+
+    private static func isSDKFileRef(_ fr: PBXFileReference) -> Bool {
+        if let st = fr.sourceTree {
+            switch st {
+            case .sdkRoot: return true
+            default: break
+            }
+        }
+        let p = (fr.path ?? fr.name ?? "").lowercased()
+        if p.hasPrefix("system/library/") || p.hasPrefix("usr/lib/") { return true }
+        return false
     }
 
     private static func resourceFiles(targetName: String, mode: PathMode, ctx: XQGQLContext) throws -> [String] {
@@ -893,6 +1061,20 @@ extension XQResolvers {
     static func resolvePackageUsage_target(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GPackageUsage.self).target }
     static func resolvePackageUsage_packageName(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GPackageUsage.self).packageName }
     static func resolvePackageUsage_productName(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GPackageUsage.self).productName }
+
+    // Link dependency leaf resolvers
+    static func resolveLinkDependency_name(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GLinkDependency.self).name }
+    static func resolveLinkDependency_kind(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GLinkDependency.self).kind }
+    static func resolveLinkDependency_path(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GLinkDependency.self).path }
+    static func resolveLinkDependency_embed(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GLinkDependency.self).embed }
+    static func resolveLinkDependency_weak(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GLinkDependency.self).weak }
+
+    static func resolveFlatLink_target(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GFlatLinkDependency.self).target }
+    static func resolveFlatLink_name(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GFlatLinkDependency.self).name }
+    static func resolveFlatLink_kind(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GFlatLinkDependency.self).kind }
+    static func resolveFlatLink_path(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GFlatLinkDependency.self).path }
+    static func resolveFlatLink_embed(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GFlatLinkDependency.self).embed }
+    static func resolveFlatLink_weak(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GFlatLinkDependency.self).weak }
 }
 
 // MARK: - Enum mapping (duplicate minimal mapping for adapters)
