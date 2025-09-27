@@ -60,6 +60,9 @@ Top-level fields (selection required):
   - `buildConfigurations: [String!]!`
   - `projectBuildSettings(filter: ProjectBuildSettingFilter): [ProjectBuildSetting!]!`
   - `targetBuildSettings(scope: BuildSettingsScope = TARGET_ONLY, filter: BuildSettingFilter): [TargetBuildSetting!]!`
+  - Swift Packages:
+    - `swiftPackages(filter: SwiftPackageFilter): [SwiftPackage!]!`
+    - `targetPackageProducts(filter: PackageProductUsageFilter): [PackageProductUsage!]!`
 
 Types and inputs:
 - `type Target { name, type, dependencies(recursive, filter), sources(pathMode, filter), resources(pathMode, filter), buildScripts(filter), buildSettings(scope, filter) }`
@@ -70,6 +73,8 @@ Types and inputs:
 - `enum ScriptStage { PRE, POST }`
 - `enum BuildSettingsScope { PROJECT_ONLY, TARGET_ONLY, MERGED }`
 - `enum BuildSettingOrigin { PROJECT, TARGET }`
+ - `enum RequirementKind { EXACT, RANGE, UP_TO_NEXT_MAJOR, UP_TO_NEXT_MINOR, BRANCH, REVISION }`
+ - `enum PackageProductType { LIBRARY, EXECUTABLE, PLUGIN, OTHER }`
 - Filters:
   - `input TargetFilter { name: StringMatch, type: TargetType }`
   - `input SourceFilter { path: StringMatch, target: StringMatch }`
@@ -78,6 +83,13 @@ Types and inputs:
   - `input ProjectBuildSettingFilter { key: StringMatch, configuration: StringMatch }`
   - `input BuildSettingFilter { key: StringMatch, configuration: StringMatch, target: StringMatch }`
   - `input StringMatch { eq: String, regex: String, prefix: String, suffix: String, contains: String }`
+  - `input SwiftPackageFilter { name: StringMatch, identity: StringMatch, url: StringMatch, product: StringMatch, consumerTarget: StringMatch }`
+  - `input PackageProductFilter { name: StringMatch }`
+  - `input PackageProductUsageFilter { target: StringMatch, package: StringMatch, product: StringMatch }`
+
+Swift Packages types:
+- `type SwiftPackage { name, identity, url, requirement { kind, value }, products { name, type }, consumers { target, product } }`
+- `type PackageProductUsage { target, packageName, productName }`
 
 ## Examples
 
@@ -115,6 +127,16 @@ Types and inputs:
     - `xcq 'targets(type: FRAMEWORK) { name buildScripts(filter: { stage: PRE }) { name stage inputPaths } }'`
   - Flat with stage filter:
     - `xcq 'targetBuildScripts(filter: { stage: PRE }) { target name stage }'`
+
+- Swift Packages
+  - List packages with requirements:
+    - `xcq 'swiftPackages { name identity url requirement { kind value } }'`
+  - Products consumed by a target:
+    - `xcq 'target(name: "App") { packageProducts { packageName productName } }'`
+  - Flat view for piping/grepping:
+    - `xcq 'targetPackageProducts { target packageName productName }'`
+  - Filter packages by consumer target:
+    - `xcq 'swiftPackages(filter: { consumerTarget: { eq: "App" } }) { name products { name } }'`
 
 - Target membership for a file
   - `xcq 'targetMembership(path: "Shared/Shared.swift", pathMode: NORMALIZED) { path targets }'`

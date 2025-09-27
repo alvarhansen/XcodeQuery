@@ -25,6 +25,13 @@ struct GProjectBuildSetting { let configuration: String; let key: String; let va
 struct GTargetBuildSetting { let target: String; let configuration: String; let key: String; let value: String?; let values: [String]?; let isArray: Bool; let origin: String }
 struct GBuildSetting { let configuration: String; let key: String; let value: String?; let values: [String]?; let isArray: Bool; let origin: String }
 
+// Swift Packages wrappers
+struct GPackageRequirement { let kind: String; let value: String }
+struct GPackageProduct { let name: String; let type: String }
+struct GPackageConsumer { let target: String; let product: String }
+struct GSwiftPackage { let name: String; let identity: String; let url: String?; let requirement: GPackageRequirement; let products: [GPackageProduct]; let consumers: [GPackageConsumer] }
+struct GPackageUsage { let target: String; let packageName: String; let productName: String }
+
 // MARK: - Resolvers
 
 enum XQResolvers {
@@ -206,6 +213,53 @@ enum XQResolvers {
         return GMembership(path: path, targets: Array(owners).sorted())
     }
 
+    // MARK: Swift Packages — Root resolvers
+    static func resolveSwiftPackages(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
+        let ctx = try expectCtx(context)
+        let index = try buildPackageIndex(ctx: ctx)
+        var list = index.packages
+        if let filter = args["filter"].dictionary {
+            list = list.filter { p in
+                var ok = true
+                if let v = filter["name"], !v.isUndefined, !v.isNull { ok = ok && matchString(p.name, value: v) }
+                if let v = filter["identity"], !v.isUndefined, !v.isNull { ok = ok && matchString(p.identity, value: v) }
+                if let v = filter["url"], !v.isUndefined, !v.isNull { ok = ok && matchString(p.url ?? "", value: v) }
+                if let v = filter["product"], !v.isUndefined, !v.isNull { ok = ok && p.products.contains { matchString($0.name, value: v) } }
+                if let v = filter["consumerTarget"], !v.isUndefined, !v.isNull { ok = ok && p.consumers.contains { matchString($0.target, value: v) } }
+                return ok
+            }
+        }
+        list.sort { a, b in
+            if a.identity != b.identity { return a.identity < b.identity }
+            return a.name < b.name
+        }
+        return list
+    }
+
+    static func resolveTargetPackageProducts(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
+        let ctx = try expectCtx(context)
+        _ = try buildPackageIndex(ctx: ctx) // ensure indexable; currently unused but may validate
+        var rows: [GPackageUsage] = []
+        for nt in ctx.project.pbxproj.nativeTargets {
+            rows.append(contentsOf: try packageUsagesForTarget(nt: nt, ctx: ctx))
+        }
+        if let filter = args["filter"].dictionary {
+            rows = rows.filter { r in
+                var ok = true
+                if let v = filter["target"], !v.isUndefined, !v.isNull { ok = ok && matchString(r.target, value: v) }
+                if let v = filter["package"], !v.isUndefined, !v.isNull { ok = ok && matchString(r.packageName, value: v) }
+                if let v = filter["product"], !v.isUndefined, !v.isNull { ok = ok && matchString(r.productName, value: v) }
+                return ok
+            }
+        }
+        rows.sort { a, b in
+            if a.target != b.target { return a.target < b.target }
+            if a.packageName != b.packageName { return a.packageName < b.packageName }
+            return a.productName < b.productName
+        }
+        return rows
+    }
+
     // MARK: Target object
     static func resolveTarget_name(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
         let t = try expect(source, as: GTarget.self)
@@ -256,6 +310,19 @@ enum XQResolvers {
         fputs("[xcq-debug] resolveTarget_buildScripts: target=\(t.nt.name), count=\(wrapped.count)\n", stderr)
         #endif
         return wrapped
+    }
+
+    static func resolveTarget_packageProducts(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
+        let t = try expect(source, as: GTarget.self)
+        var rows = try packageUsagesForTarget(nt: t.nt, ctx: t.ctx)
+        if let filter = args["filter"].dictionary {
+            rows = rows.filter { r in
+                if let nameV = filter["name"], !nameV.isUndefined, !nameV.isNull { return matchString(r.productName, value: nameV) }
+                return true
+            }
+        }
+        rows.sort { a, b in a.packageName == b.packageName ? a.productName < b.productName : a.packageName < b.packageName }
+        return rows
     }
 
     static func resolveTarget_buildSettings(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? {
@@ -717,6 +784,115 @@ private final class DependencyGraph {
         }
         return unique
     }
+}
+
+// MARK: - Swift Packages helpers
+private struct PackageIndex { var packages: [GSwiftPackage] }
+
+private func buildPackageIndex(ctx: XQGQLContext) throws -> PackageIndex {
+    var packageInfos: [String: (name: String, identity: String, url: String?, requirement: GPackageRequirement)] = [:]
+    var productsByPackage: [String: [String: String]] = [:] // packageName -> productName -> type
+    var consumers: [String: [String: Set<String>]] = [:] // packageName -> productName -> Set(target)
+
+    if let proj = ctx.project.pbxproj.projects.first {
+        for p in proj.remotePackages {
+            let name = p.name ?? (p.repositoryURL?.split(separator: "/").last.map(String.init)?.replacingOccurrences(of: ".git", with: "") ?? "")
+            let identity = name.lowercased()
+            let req = toRequirement(p.versionRequirement)
+            packageInfos[name] = (name: name, identity: identity, url: p.repositoryURL, requirement: req)
+        }
+        for lp in proj.localPackages {
+            let name = lp.name ?? lp.relativePath
+            let identity = name.lowercased()
+            let req = GPackageRequirement(kind: "EXACT", value: "")
+            if packageInfos[name] == nil {
+                packageInfos[name] = (name: name, identity: identity, url: nil, requirement: req)
+            }
+        }
+    }
+
+    for t in ctx.project.pbxproj.nativeTargets {
+        if let deps = t.packageProductDependencies {
+            for d in deps {
+                let pkgName = d.package?.name ?? inferLocalPackageName(for: d)
+                guard !pkgName.isEmpty else { continue }
+                let prod = d.productName
+                let type = "LIBRARY"
+                productsByPackage[pkgName, default: [:]][prod] = type
+                var byProd = consumers[pkgName, default: [:]]
+                var set = byProd[prod, default: Set<String>()]
+                set.insert(t.name)
+                byProd[prod] = set
+                consumers[pkgName] = byProd
+            }
+        }
+    }
+
+    var packages: [GSwiftPackage] = []
+    for (name, meta) in packageInfos {
+        let prods = productsByPackage[name]?.map { GPackageProduct(name: $0.key, type: $0.value) } ?? []
+        var cons: [GPackageConsumer] = []
+        if let pc = consumers[name] {
+            for (product, targets) in pc {
+                for t in targets { cons.append(GPackageConsumer(target: t, product: product)) }
+            }
+        }
+        let pkg = GSwiftPackage(name: meta.name, identity: meta.identity, url: meta.url, requirement: meta.requirement, products: prods.sorted { $0.name < $1.name }, consumers: cons.sorted { a, b in a.target == b.target ? a.product < b.product : a.target < b.target })
+        packages.append(pkg)
+    }
+    return PackageIndex(packages: packages)
+}
+
+private func inferLocalPackageName(for dep: XCSwiftPackageProductDependency) -> String {
+    // XcodeProj doesn't link local package refs to the product dependency; fall back to product name.
+    return dep.productName
+}
+
+private func toRequirement(_ vr: XCRemoteSwiftPackageReference.VersionRequirement?) -> GPackageRequirement {
+    guard let vr else { return GPackageRequirement(kind: "EXACT", value: "") }
+    switch vr {
+    case .exact(let v): return GPackageRequirement(kind: "EXACT", value: v)
+    case .upToNextMajorVersion(let v): return GPackageRequirement(kind: "UP_TO_NEXT_MAJOR", value: v)
+    case .upToNextMinorVersion(let v): return GPackageRequirement(kind: "UP_TO_NEXT_MINOR", value: v)
+    case .range(let from, let to): return GPackageRequirement(kind: "RANGE", value: "\(from)...\(to)")
+    case .branch(let b): return GPackageRequirement(kind: "BRANCH", value: b)
+    case .revision(let r): return GPackageRequirement(kind: "REVISION", value: r)
+    }
+}
+
+private func packageUsagesForTarget(nt: PBXNativeTarget, ctx: XQGQLContext) throws -> [GPackageUsage] {
+    var rows: [GPackageUsage] = []
+    if let deps = nt.packageProductDependencies {
+        for d in deps {
+            let pkgName = d.package?.name ?? inferLocalPackageName(for: d)
+            guard !pkgName.isEmpty else { continue }
+            rows.append(GPackageUsage(target: nt.name, packageName: pkgName, productName: d.productName))
+        }
+    }
+    return rows
+}
+
+// MARK: Swift Packages leaf resolvers
+extension XQResolvers {
+    static func resolveSwiftPackage_name(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GSwiftPackage.self).name }
+    static func resolveSwiftPackage_identity(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GSwiftPackage.self).identity }
+    static func resolveSwiftPackage_url(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GSwiftPackage.self).url }
+    static func resolveSwiftPackage_requirement(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GSwiftPackage.self).requirement }
+    static func resolveSwiftPackage_products(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GSwiftPackage.self).products }
+    static func resolveSwiftPackage_consumers(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GSwiftPackage.self).consumers }
+
+    static func resolvePackageRequirement_kind(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GPackageRequirement.self).kind }
+    static func resolvePackageRequirement_value(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GPackageRequirement.self).value }
+
+    static func resolvePackageProduct_name(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GPackageProduct.self).name }
+    static func resolvePackageProduct_type(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GPackageProduct.self).type }
+
+    static func resolvePackageConsumer_target(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GPackageConsumer.self).target }
+    static func resolvePackageConsumer_product(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GPackageConsumer.self).product }
+
+    static func resolvePackageUsage_target(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GPackageUsage.self).target }
+    static func resolvePackageUsage_packageName(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GPackageUsage.self).packageName }
+    static func resolvePackageUsage_productName(_ source: Any, _ args: Map, _ context: Any, _ info: GraphQLResolveInfo) throws -> Any? { try expect(source, as: GPackageUsage.self).productName }
 }
 
 // MARK: - Enum mapping (duplicate minimal mapping for adapters)

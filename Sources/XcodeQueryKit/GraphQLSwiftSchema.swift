@@ -44,6 +44,21 @@ enum XQGraphQLSwiftSchema {
             "PROJECT": GraphQLEnumValue(value: Map("PROJECT")),
             "TARGET": GraphQLEnumValue(value: Map("TARGET")),
         ])
+        // Swift Packages enums
+        let requirementKind = try GraphQLEnumType(name: "RequirementKind", values: [
+            "EXACT": GraphQLEnumValue(value: Map("EXACT")),
+            "RANGE": GraphQLEnumValue(value: Map("RANGE")),
+            "UP_TO_NEXT_MAJOR": GraphQLEnumValue(value: Map("UP_TO_NEXT_MAJOR")),
+            "UP_TO_NEXT_MINOR": GraphQLEnumValue(value: Map("UP_TO_NEXT_MINOR")),
+            "BRANCH": GraphQLEnumValue(value: Map("BRANCH")),
+            "REVISION": GraphQLEnumValue(value: Map("REVISION")),
+        ])
+        let packageProductType = try GraphQLEnumType(name: "PackageProductType", values: [
+            "LIBRARY": GraphQLEnumValue(value: Map("LIBRARY")),
+            "EXECUTABLE": GraphQLEnumValue(value: Map("EXECUTABLE")),
+            "PLUGIN": GraphQLEnumValue(value: Map("PLUGIN")),
+            "OTHER": GraphQLEnumValue(value: Map("OTHER")),
+        ])
 
         // MARK: Inputs
         let stringMatch = try GraphQLInputObjectType(name: "StringMatch", fields: [
@@ -76,6 +91,22 @@ enum XQGraphQLSwiftSchema {
             "configuration": InputObjectField(type: stringMatch),
             "target": InputObjectField(type: stringMatch),
         ])
+        // Swift Packages filters
+        let swiftPackageFilter = try GraphQLInputObjectType(name: "SwiftPackageFilter", fields: [
+            "name": InputObjectField(type: stringMatch),
+            "identity": InputObjectField(type: stringMatch),
+            "url": InputObjectField(type: stringMatch),
+            "product": InputObjectField(type: stringMatch),
+            "consumerTarget": InputObjectField(type: stringMatch),
+        ])
+        let packageProductFilter = try GraphQLInputObjectType(name: "PackageProductFilter", fields: [
+            "name": InputObjectField(type: stringMatch),
+        ])
+        let packageProductUsageFilter = try GraphQLInputObjectType(name: "PackageProductUsageFilter", fields: [
+            "target": InputObjectField(type: stringMatch),
+            "package": InputObjectField(type: stringMatch),
+            "product": InputObjectField(type: stringMatch),
+        ])
 
         // MARK: Objects
         // Leaf/simple types
@@ -92,6 +123,33 @@ enum XQGraphQLSwiftSchema {
             "outputPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))), resolve: XQResolvers.resolveBuildScript_outputPaths),
             "inputFileListPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))), resolve: XQResolvers.resolveBuildScript_inputFileListPaths),
             "outputFileListPaths": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(string))), resolve: XQResolvers.resolveBuildScript_outputFileListPaths),
+        ])
+
+        // Swift Packages: objects
+        let packageRequirement = try GraphQLObjectType(name: "PackageRequirement", fields: [
+            "kind": GraphQLField(type: GraphQLNonNull(requirementKind), resolve: XQResolvers.resolvePackageRequirement_kind),
+            "value": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolvePackageRequirement_value),
+        ])
+        let packageProduct = try GraphQLObjectType(name: "PackageProduct", fields: [
+            "name": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolvePackageProduct_name),
+            "type": GraphQLField(type: GraphQLNonNull(packageProductType), resolve: XQResolvers.resolvePackageProduct_type),
+        ])
+        let packageConsumer = try GraphQLObjectType(name: "PackageConsumer", fields: [
+            "target": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolvePackageConsumer_target),
+            "product": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolvePackageConsumer_product),
+        ])
+        let packageProductUsage = try GraphQLObjectType(name: "PackageProductUsage", fields: [
+            "target": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolvePackageUsage_target),
+            "packageName": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolvePackageUsage_packageName),
+            "productName": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolvePackageUsage_productName),
+        ])
+        let swiftPackage = try GraphQLObjectType(name: "SwiftPackage", fields: [
+            "name": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveSwiftPackage_name),
+            "identity": GraphQLField(type: GraphQLNonNull(string), resolve: XQResolvers.resolveSwiftPackage_identity),
+            "url": GraphQLField(type: string, resolve: XQResolvers.resolveSwiftPackage_url),
+            "requirement": GraphQLField(type: GraphQLNonNull(packageRequirement), resolve: XQResolvers.resolveSwiftPackage_requirement),
+            "products": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(packageProduct))), resolve: XQResolvers.resolveSwiftPackage_products),
+            "consumers": GraphQLField(type: GraphQLNonNull(GraphQLList(GraphQLNonNull(packageConsumer))), resolve: XQResolvers.resolveSwiftPackage_consumers),
         ])
 
         // BuildSetting object used by Target.buildSettings
@@ -133,6 +191,11 @@ enum XQGraphQLSwiftSchema {
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(buildScript))),
                 args: ["filter": GraphQLArgument(type: buildScriptFilter)],
                 resolve: XQResolvers.resolveTarget_buildScripts
+            ),
+            "packageProducts": GraphQLField(
+                type: GraphQLNonNull(GraphQLList(GraphQLNonNull(packageProductUsage))),
+                args: ["filter": GraphQLArgument(type: packageProductFilter)],
+                resolve: XQResolvers.resolveTarget_packageProducts
             ),
             "buildSettings": GraphQLField(
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(buildSetting))),
@@ -274,6 +337,16 @@ enum XQGraphQLSwiftSchema {
                 type: GraphQLNonNull(GraphQLList(GraphQLNonNull(targetBuildScript))),
                 args: ["filter": GraphQLArgument(type: buildScriptFilter)],
                 resolve: XQResolvers.resolveTargetBuildScripts
+            ),
+            "swiftPackages": GraphQLField(
+                type: GraphQLNonNull(GraphQLList(GraphQLNonNull(swiftPackage))),
+                args: ["filter": GraphQLArgument(type: swiftPackageFilter)],
+                resolve: XQResolvers.resolveSwiftPackages
+            ),
+            "targetPackageProducts": GraphQLField(
+                type: GraphQLNonNull(GraphQLList(GraphQLNonNull(packageProductUsage))),
+                args: ["filter": GraphQLArgument(type: packageProductUsageFilter)],
+                resolve: XQResolvers.resolveTargetPackageProducts
             ),
             "targetMembership": GraphQLField(
                 type: GraphQLNonNull(targetMembership),
