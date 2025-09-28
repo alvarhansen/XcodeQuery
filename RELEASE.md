@@ -49,24 +49,24 @@ Options:
 - Auto-generate notes: add `--generate-notes` (and optionally append your own with `-n`).
 - Use a notes file: `-F path/to/notes.md`.
 
-## 5) Update Homebrew formula (build from source)
-The formula builds from the source tarball at the tag. Update the stable URL and SHA.
+## 5) Update Homebrew formula (prebuilt by default)
+Stable installs use the prebuilt release zip asset. Update the URL and SHA to the zip.
 
-- Get tarball checksum:
-  - `curl -L -o /tmp/xcq-vX.Y.Z.tar.gz https://github.com/alvarhansen/XcodeQuery/archive/refs/tags/vX.Y.Z.tar.gz`
-  - `shasum -a 256 /tmp/xcq-vX.Y.Z.tar.gz` → copy the SHA256
-- Edit `HomebrewFormula/xcq.rb` and set:
-  - `url "https://github.com/alvarhansen/XcodeQuery/archive/refs/tags/vX.Y.Z.tar.gz"`
-  - `sha256 "<THE_SHA256_OF_TARBALL>"`
+- Compute zip checksum (from step 3):
+  - `shasum -a 256 dist/xcq-vX.Y.Z-macos.zip` → copy the SHA256
+- Edit `HomebrewFormula/xcq.rb` and set stable to the release asset:
+  - `url "https://github.com/alvarhansen/XcodeQuery/releases/download/vX.Y.Z/xcq-vX.Y.Z-macos.zip"`
+  - `sha256 "<THE_SHA256_OF_ZIP>"`
+- Ensure the formula's `install` copies the binary when not building `--HEAD`.
 - Commit and push:
-  - `git add HomebrewFormula/xcq.rb && git commit -m "Homebrew: xcq vX.Y.Z"`
+  - `git add HomebrewFormula/xcq.rb && git commit -m "Homebrew: xcq vX.Y.Z (prebuilt)"`
   - `git push origin main`
 
 ## 6) Publish the updated formula to the tap
 - Clone/update the tap repo: `git clone git@github.com:alvarhansen/homebrew-xcodequery.git`
 - Copy updated formula into the tap repo (replace existing `xcq.rb`).
 - Commit and push in the tap repo:
-  - `git add Formula/xcq.rb && git commit -m "xcq vX.Y.Z (build from source)"`
+  - `git add Formula/xcq.rb && git commit -m "xcq vX.Y.Z (prebuilt)"`
   - `git push origin main`
 
 ## 7) Verify Homebrew install
