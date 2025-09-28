@@ -187,17 +187,7 @@ Swift Packages types:
 
 ## Releasing (maintainers)
 
-1) Create a version tag, e.g. `v0.1.0`, and push it:
-   - `git tag v0.1.0 && git push origin v0.1.0`
-
-2) GitHub Actions will automatically:
-   - Build the release binary for macOS
-   - Publish the GitHub Release (idempotent via `gh`), uploading `xcq-v0.1.0-macos.zip`
-   - Update the `alvarhansen/homebrew-xcodequery` tap to install the prebuilt binary
-
-3) Users install via the tap:
-   - Stable: `brew tap alvarhansen/xcodequery && brew install xcq`
-   - HEAD: `brew tap alvarhansen/xcodequery && brew install --HEAD xcq`
+Releases are done locally (no CI automation). See `RELEASE.md` for the step‑by‑step process: tagging, building the zip, creating the GitHub release, and updating the Homebrew formula and tap.
 
 ## Homebrew Tap
 
