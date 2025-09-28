@@ -3,10 +3,9 @@ class Xcq < Formula
   homepage "https://github.com/alvarhansen/XcodeQuery"
   license "MIT"
 
-  # Stable release (update url, version, and sha256 on each release)
-  # Example for tag v0.1.0:
-  # url "https://github.com/alvarhansen/XcodeQuery/archive/refs/tags/v0.1.0.tar.gz"
-  # sha256 "REPLACE_WITH_TARBALL_SHA256"
+  # Stable release
+  url "https://github.com/alvarhansen/XcodeQuery/archive/refs/tags/v0.1.2.tar.gz"
+  sha256 "f3001f344efaffd67e82419b516565a211a438a07a6a7a44f36cafa5c260db2c"
 
   head "https://github.com/alvarhansen/XcodeQuery.git", branch: "main"
 
