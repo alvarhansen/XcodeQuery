@@ -14,9 +14,53 @@ const elements = {
   runButton: document.getElementById("run-button"),
   resetButton: document.getElementById("reset-button"),
   queryInput: document.getElementById("query-input"),
+  exampleList: document.getElementById("example-list"),
   status: document.getElementById("status"),
   output: document.getElementById("output"),
 };
+
+const examples = [
+  {
+    name: "Targets + types",
+    query: "targets { name type }",
+  },
+  {
+    name: "Build configurations",
+    query: "buildConfigurations",
+  },
+  {
+    name: "Target sources (normalized)",
+    query: "targetSources(pathMode: NORMALIZED) { target path }",
+  },
+  {
+    name: "Target resources",
+    query: "targetResources { target path }",
+  },
+  {
+    name: "Build scripts",
+    query: "targetBuildScripts { target name stage }",
+  },
+  {
+    name: "Link dependencies",
+    query: "targetLinkDependencies { target name kind embed weak }",
+  },
+  {
+    name: "Target dependencies",
+    query: "targetDependencies { target name type }",
+  },
+  {
+    name: "Swift packages",
+    query: "swiftPackages { name identity url }",
+  },
+  {
+    name: "Build settings (SWIFT keys)",
+    query: "targetBuildSettings(filter: { key: { contains: \"SWIFT\" } }) { target configuration key value }",
+  },
+  {
+    name: "Schemes",
+    query: "schemes { name isShared buildTargets testTargets runTarget }",
+  },
+];
 
 const state = {
   entries: [],
@@ -37,6 +81,25 @@ function updateMeta() {
   elements.projectName.textContent = state.projectRoot ?? "None";
   elements.projectCount.textContent = `${state.fileCount}`;
   elements.runButton.disabled = !state.pbxprojEntry;
+}
+
+function renderExamples() {
+  if (!elements.exampleList) {
+    return;
+  }
+  elements.exampleList.innerHTML = "";
+  for (const example of examples) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "example-button";
+    button.textContent = example.name;
+    button.title = example.query;
+    button.addEventListener("click", () => {
+      elements.queryInput.value = example.query;
+      setStatus(`Example loaded: ${example.name}`, "success");
+    });
+    elements.exampleList.appendChild(button);
+  }
 }
 
 function resetState() {
@@ -452,4 +515,5 @@ function attachEvents() {
 }
 
 resetState();
+renderExamples();
 attachEvents();
