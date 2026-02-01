@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>XcodeQuery WASM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="backdrop"></div>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">XcodeQuery · WASM</p>
+          <h1>Query Xcode projects in the browser.</h1>
+          <p class="lede">
+            Drop an <strong>.xcodeproj</strong> or zip, run a GraphQL-style selection, and inspect the JSON response powered by the internal runtime.
+          </p>
+        </div>
+        <div class="hero-card">
+          <p class="hero-label">Status</p>
+          <p id="status" class="status" data-tone="idle">Waiting for a project…</p>
+          <div class="meta">
+            <div>
+              <p class="meta-label">Project</p>
+              <p id="project-name" class="meta-value">None</p>
+            </div>
+            <div>
+              <p class="meta-label">Files</p>
+              <p id="project-count" class="meta-value">0</p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <section class="grid">
+        <div class="panel" id="drop-zone">
+          <div class="panel-head">
+            <h2>Load a project</h2>
+            <p>Drag an .xcodeproj folder or choose a folder/zip.</p>
+          </div>
+          <div class="panel-body">
+            <div class="drop-inner">
+              <p class="drop-title">Drop your project here</p>
+              <p class="drop-subtitle">Supports .xcodeproj folder selections or zip archives.</p>
+              <div class="drop-actions">
+                <label class="button">
+                  Choose folder
+                  <input id="project-input" type="file" webkitdirectory directory multiple />
+                </label>
+                <label class="button ghost">
+                  Choose zip
+                  <input id="project-zip-input" type="file" accept=".zip" />
+                </label>
+              </div>
+              <p class="drop-hint">Tip: The file list must include <code>project.pbxproj</code>.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Run a query</h2>
+            <p>Selection-only GraphQL. No top-level braces.</p>
+          </div>
+          <div class="panel-body">
+            <label class="field">
+              <span>Query</span>
+              <textarea id="query-input" spellcheck="false">targets { name type }</textarea>
+            </label>
+            <div class="actions">
+              <button id="run-button" class="button primary" disabled>Run query</button>
+              <button id="reset-button" class="button ghost" type="button">Reset</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel output">
+        <div class="panel-head">
+          <h2>Output</h2>
+          <p>Pretty-printed JSON response from the WASM runtime.</p>
+        </div>
+        <div class="panel-body">
+          <pre id="output">// Output will appear here.</pre>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>
+        Powered by the internal GraphQL runtime. Build the WASM bundle with <code>make wasm-web</code>.
+      </p>
+    </footer>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

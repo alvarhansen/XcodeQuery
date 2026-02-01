@@ -16,15 +16,28 @@ public class XcodeProjectQuery {
         guard !trimmed.hasPrefix("{") else {
             throw Error.invalidQuery("Top-level braces are not supported. Write selection only, e.g., targets { name type }")
         }
-        let value = try evaluateWithGraphQLRuntime(selection: trimmed)
+        let proj = try XcodeProj(pathString: projectPath)
+        let value = try Self.evaluateWithGraphQLRuntime(selection: trimmed, project: proj, projectPath: projectPath)
+        return AnyEncodable(value)
+    }
+
+    // MARK: - PBXProj-backed entrypoint (WASM-friendly)
+    public static func evaluate(query: String, pbxprojData: Data, projectPath: String? = nil) throws -> AnyEncodable {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.hasPrefix("{") else {
+            throw Error.invalidQuery("Top-level braces are not supported. Write selection only, e.g., targets { name type }")
+        }
+        let pbxproj = try PBXProj(data: pbxprojData)
+        let project = XcodeProj(workspace: XCWorkspace(), pbxproj: pbxproj, sharedData: nil, userData: [], path: nil)
+        let resolvedPath = projectPath ?? "/project/Project.xcodeproj"
+        let value = try evaluateWithGraphQLRuntime(selection: trimmed, project: project, projectPath: resolvedPath)
         return AnyEncodable(value)
     }
 
     // MARK: - GraphQLRuntime execution path
-    private func evaluateWithGraphQLRuntime(selection: String) throws -> JSONValue {
+    private static func evaluateWithGraphQLRuntime(selection: String, project: XcodeProj, projectPath: String) throws -> JSONValue {
         let schema = try XQGraphQLSchema.makeSchema()
-        let proj = try XcodeProj(pathString: projectPath)
-        let ctx = XQGQLContext(project: proj, projectPath: projectPath)
+        let ctx = XQGQLContext(project: project, projectPath: projectPath)
         let request = "{" + selection + "}"
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }

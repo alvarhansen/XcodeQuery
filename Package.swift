@@ -7,9 +7,10 @@ let package = Package(
     platforms: [.macOS(.v15)],
     products: [
         .executable(name: "xcq", targets: ["XcodeQuery"]),
+        .executable(name: "xcodequery-wasm", targets: ["XcodeQueryWasm"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/tuist/XcodeProj.git", exact: "8.27.7"),
+        .package(path: "../XcodeProj"),
         .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.6.1"),
         .package(url: "https://github.com/yonaskolb/XcodeGen.git", from: "2.41.0"),
     ],
@@ -32,6 +33,23 @@ let package = Package(
             name: "XcodeQueryKit",
             dependencies: [
                 .product(name: "XcodeProj", package: "XcodeProj"),
+            ]
+        ),
+        .executableTarget(
+            name: "XcodeQueryWasm",
+            dependencies: [
+                .target(name: "XcodeQueryKit"),
+            ],
+            linkerSettings: [
+                .unsafeFlags(
+                    [
+                        "-Xlinker", "--export=xcq_alloc",
+                        "-Xlinker", "--export=xcq_free",
+                        "-Xlinker", "--export=xcq_last_error",
+                        "-Xlinker", "--export=xcq_query_from_pbxproj_json",
+                    ],
+                    .when(platforms: [.wasi])
+                ),
             ]
         ),
         .testTarget(
