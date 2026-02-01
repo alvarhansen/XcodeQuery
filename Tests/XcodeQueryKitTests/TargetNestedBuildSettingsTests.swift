@@ -1,12 +1,10 @@
 import XCTest
-@preconcurrency import GraphQL
-import NIO
 import XcodeProj
 @testable import XcodeQueryKit
 
 final class TargetNestedBuildSettingsTests: XCTestCase {
     func testSchemaTargetBuildSettingsFieldAndDefaults() throws {
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         guard let target = schema.getType(name: "Target") as? GraphQLObjectType else { return XCTFail("Missing Target type") }
         guard let field = target.fields["buildSettings"] else { return XCTFail("Missing Target.buildSettings field") }
         let args = Dictionary(uniqueKeysWithValues: field.args.map { ($0.name, $0) })
@@ -18,7 +16,7 @@ final class TargetNestedBuildSettingsTests: XCTestCase {
 
     func testResolveNestedBuildSettingsScopes() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let ctx: XQGQLContext = try {

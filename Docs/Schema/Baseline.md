@@ -1,7 +1,7 @@
 # XcodeQuery GraphQL Baseline Contract (Phase 0)
 
 Goal
-- Freeze the current query surface and behavior so later phases (GraphQLSwift migration) can assert parity.
+- Freeze the current query surface and behavior so later phases (GraphQL runtime migration) can assert parity.
 
 Scope
 - CLI accepts a selection-only GraphQL-style query (no top-level braces).
@@ -91,7 +91,7 @@ Testing Artifacts
 - Failure-mode tests for parse and execution errors live in `Tests/XcodeQueryKitTests/GraphQLErrorTests.swift`.
 
 Provenance
-- This schema mirrors the GraphQLSwift runtime schema (`Sources/XcodeQueryKit/GraphQLSwiftSchema.swift`) and is used by the CLI via an adapter (`XQSchemaBuilder`).
+- This schema mirrors the GraphQL runtime schema (`Sources/XcodeQueryKit/XQGraphQLSchema.swift`) and is used by the CLI via an adapter (`XQSchemaBuilder`).
 - Build settings specifics:
   - All configurations are included by default; use `filter.configuration` to narrow.
   - `targetBuildSettings.scope` and `Target.buildSettings.scope` select `PROJECT_ONLY`, `TARGET_ONLY`, or `MERGED` (target overrides project per key).

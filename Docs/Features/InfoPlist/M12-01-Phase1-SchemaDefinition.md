@@ -4,7 +4,7 @@ Goal: Add `infoPlist` field to `Target` and types for common keys and entries.
 
 ## Deliverables
 
-- GraphQLSwift additions:
+- GraphQL runtime additions:
   - `InfoPlist`, `InfoPlistEntry` types
   - `InfoPlistKeyFilter` input
   - Target field `infoPlist(configuration: String, filter: InfoPlistFilter): InfoPlist!`

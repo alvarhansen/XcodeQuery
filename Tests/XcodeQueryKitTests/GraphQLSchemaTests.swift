@@ -1,10 +1,9 @@
 import XCTest
 @testable import XcodeQueryKit
-@preconcurrency import GraphQL
 
-final class GraphQLSwiftSchemaTests: XCTestCase {
+final class GraphQLSchemaTests: XCTestCase {
     func testRootFieldsAndArgsMatchBaseline() throws {
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let query = schema.queryType
 
         func field(_ name: String) -> GraphQLFieldDefinition? { query.fields[name] }
@@ -69,7 +68,7 @@ final class GraphQLSwiftSchemaTests: XCTestCase {
     }
 
     func testEnumAndInputTypesExist() throws {
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         // Enums
         XCTAssertNotNil(schema.getType(name: "TargetType") as? GraphQLEnumType)
         XCTAssertNotNil(schema.getType(name: "PathMode") as? GraphQLEnumType)

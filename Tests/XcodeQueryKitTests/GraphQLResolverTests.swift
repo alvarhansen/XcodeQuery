@@ -1,19 +1,17 @@
 import XCTest
-@preconcurrency import GraphQL
-import NIO
 import XcodeProj
 import PathKit
 import ProjectSpec
 import XcodeGenKit
 @testable import XcodeQueryKit
 
-final class GraphQLSwiftResolverTests: XCTestCase {
-    func testTargetsAndSourcesViaGraphQLSwift() throws {
+final class GraphQLResolverTests: XCTestCase {
+    func testTargetsAndSourcesViaGraphQLRuntime() throws {
         // Arrange project via baseline fixture
         let fixture = try GraphQLBaselineFixture()
 
         // Obtain schema and run query
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
 
@@ -28,7 +26,7 @@ final class GraphQLSwiftResolverTests: XCTestCase {
         let ctx: XQGQLContext = try {
             let m = Mirror(reflecting: qp)
             guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"])
+                throw NSError(domain: "GraphQLResolverTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"])
             }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
@@ -75,7 +73,7 @@ final class GraphQLSwiftResolverTests: XCTestCase {
         let fixture = try GraphQLBaselineFixture()
 
         // Obtain schema and run query
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
 
@@ -83,10 +81,10 @@ final class GraphQLSwiftResolverTests: XCTestCase {
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
             guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
             let m = Mirror(reflecting: qp)
             guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -108,17 +106,17 @@ final class GraphQLSwiftResolverTests: XCTestCase {
         let fixture = try GraphQLBaselineFixture()
 
         // Obtain schema and context
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
 
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
             guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 10, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 10, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
             let m = Mirror(reflecting: qp)
             guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 11, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 11, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -148,17 +146,17 @@ final class GraphQLSwiftResolverTests: XCTestCase {
         let fixture = try GraphQLBaselineFixture()
 
         // Obtain schema and context
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
 
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
             guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 20, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 20, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
             let m = Mirror(reflecting: qp)
             guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 21, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 21, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -175,17 +173,17 @@ final class GraphQLSwiftResolverTests: XCTestCase {
         let fixture = try GraphQLBaselineFixture()
 
         // Obtain schema and context
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
 
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
             guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 30, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 30, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
             let m = Mirror(reflecting: qp)
             guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 31, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 31, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -206,17 +204,17 @@ final class GraphQLSwiftResolverTests: XCTestCase {
         let fixture = try GraphQLBaselineFixture()
 
         // Obtain schema and context
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
 
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
             guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 40, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 40, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
             let m = Mirror(reflecting: qp)
             guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 41, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 41, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -230,17 +228,17 @@ final class GraphQLSwiftResolverTests: XCTestCase {
 
     func testAbsolutePathsForFlatSourcesAndResources() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
 
         let (ctx, projectRoot): (XQGQLContext, String) = try {
             let mirror = Mirror(reflecting: fixture)
             guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 50, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 50, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
             let m = Mirror(reflecting: qp)
             guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 51, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 51, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             let root = URL(fileURLWithPath: projectPath).deletingLastPathComponent().standardizedFileURL.path
             return (XQGQLContext(project: proj, projectPath: projectPath), root)
@@ -261,17 +259,17 @@ final class GraphQLSwiftResolverTests: XCTestCase {
 
     func testAbsolutePathsForNestedSourcesAndResources() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
 
         let (ctx, projectRoot): (XQGQLContext, String) = try {
             let mirror = Mirror(reflecting: fixture)
             guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 60, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 60, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
             let m = Mirror(reflecting: qp)
             guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 61, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 61, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             let root = URL(fileURLWithPath: projectPath).deletingLastPathComponent().standardizedFileURL.path
             return (XQGQLContext(project: proj, projectPath: projectPath), root)
@@ -294,16 +292,16 @@ final class GraphQLSwiftResolverTests: XCTestCase {
 
     func testRootTargetFieldAndUnknownTargetError() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
             guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 70, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 70, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
             let m = Mirror(reflecting: qp)
             guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 71, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 71, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -329,16 +327,16 @@ final class GraphQLSwiftResolverTests: XCTestCase {
 
     func testRootDependenciesAndDependents() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
             guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 80, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 80, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
             let m = Mirror(reflecting: qp)
             guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 81, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 81, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -358,16 +356,16 @@ final class GraphQLSwiftResolverTests: XCTestCase {
 
     func testRootTargetDependenciesAndBuildScriptsFilters() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
             guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 90, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 90, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
             let m = Mirror(reflecting: qp)
             guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 91, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 91, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -411,16 +409,16 @@ final class GraphQLSwiftResolverTests: XCTestCase {
 
     func testRootTargetMembershipFileRefAndAbsolute() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let (ctx, projectRoot): (XQGQLContext, String) = try {
             let mirror = Mirror(reflecting: fixture)
             guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 100, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 100, userInfo: [NSLocalizedDescriptionKey: "Could not access projectQuery"]) }
             let m = Mirror(reflecting: qp)
             guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else {
-                throw NSError(domain: "GraphQLSwiftResolverTests", code: 101, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
+                throw NSError(domain: "GraphQLResolverTests", code: 101, userInfo: [NSLocalizedDescriptionKey: "Failed to read projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             let root = URL(fileURLWithPath: projectPath).deletingLastPathComponent().standardizedFileURL.path
             return (XQGQLContext(project: proj, projectPath: projectPath), root)
@@ -447,14 +445,14 @@ final class GraphQLSwiftResolverTests: XCTestCase {
 
     func testTargetsNameStringMatchOperators() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
-            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 110, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLResolverTests", code: 110, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
             let m = Mirror(reflecting: qp)
-            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 111, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLResolverTests", code: 111, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -491,14 +489,14 @@ final class GraphQLSwiftResolverTests: XCTestCase {
 
     func testFlatSourcesFilterByTargetAndRegex() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
-            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 120, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLResolverTests", code: 120, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
             let m = Mirror(reflecting: qp)
-            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 121, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLResolverTests", code: 121, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -516,14 +514,14 @@ final class GraphQLSwiftResolverTests: XCTestCase {
 
     func testFlatResourcesFilterRegexAndTargetEq() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
-            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 130, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLResolverTests", code: 130, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
             let m = Mirror(reflecting: qp)
-            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 131, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLResolverTests", code: 131, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -541,14 +539,14 @@ final class GraphQLSwiftResolverTests: XCTestCase {
 
     func testBuildScriptsFilterByNameAndTarget() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
-            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 140, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLResolverTests", code: 140, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
             let m = Mirror(reflecting: qp)
-            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 141, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLResolverTests", code: 141, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -575,14 +573,14 @@ final class GraphQLSwiftResolverTests: XCTestCase {
 
     func testNestedSourcesFilterEqWithNormalizedPath() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
-            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 150, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLResolverTests", code: 150, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
             let m = Mirror(reflecting: qp)
-            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 151, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLResolverTests", code: 151, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -604,14 +602,14 @@ final class GraphQLSwiftResolverTests: XCTestCase {
 
     func testNestedResourcesFilterSuffixAndRegex() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
-            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 160, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLResolverTests", code: 160, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
             let m = Mirror(reflecting: qp)
-            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 161, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLResolverTests", code: 161, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -644,14 +642,14 @@ final class GraphQLSwiftResolverTests: XCTestCase {
 
     func testNestedSourcesFilterPrefixAndSuffix() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
-            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 180, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLResolverTests", code: 180, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
             let m = Mirror(reflecting: qp)
-            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 181, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLResolverTests", code: 181, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -676,14 +674,14 @@ final class GraphQLSwiftResolverTests: XCTestCase {
 
     func testTargetDependenciesFilterByTypeAndName() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
-            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 170, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLResolverTests", code: 170, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
             let m = Mirror(reflecting: qp)
-            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 171, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLResolverTests", code: 171, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -708,14 +706,14 @@ final class GraphQLSwiftResolverTests: XCTestCase {
 
     func testTargetDependenciesFilterByNamePrefixAndContains() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
-            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 175, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLResolverTests", code: 175, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
             let m = Mirror(reflecting: qp)
-            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 176, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLResolverTests", code: 176, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()
@@ -742,14 +740,14 @@ final class GraphQLSwiftResolverTests: XCTestCase {
 
     func testTargetDependenciesFilterByNameRegex() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
         let ctx: XQGQLContext = try {
             let mirror = Mirror(reflecting: fixture)
-            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 178, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
+            guard let qp = mirror.children.first(where: { $0.label == "projectQuery" })?.value as? XcodeProjectQuery else { throw NSError(domain: "GraphQLResolverTests", code: 178, userInfo: [NSLocalizedDescriptionKey: "No projectQuery"]) }
             let m = Mirror(reflecting: qp)
-            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLSwiftResolverTests", code: 179, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
+            guard let projectPath = m.children.first(where: { $0.label == "projectPath" })?.value as? String else { throw NSError(domain: "GraphQLResolverTests", code: 179, userInfo: [NSLocalizedDescriptionKey: "No projectPath"]) }
             let proj = try XcodeProj(pathString: projectPath)
             return XQGQLContext(project: proj, projectPath: projectPath)
         }()

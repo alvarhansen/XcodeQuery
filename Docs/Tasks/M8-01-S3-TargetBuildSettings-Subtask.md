@@ -6,7 +6,7 @@ Goal
 - Add a top-level query `targetBuildSettings(scope: BuildSettingsScope = TARGET_ONLY, filter: BuildSettingFilter): [TargetBuildSetting!]!` that returns build settings for each target across all configurations by default, with optional project/target/merged scoping.
 
 Schema Additions
-- In `Sources/XcodeQueryKit/GraphQLSwiftSchema.swift`:
+- In `Sources/XcodeQueryKit/XQGraphQLSchema.swift`:
   - Enums:
     - `enum BuildSettingsScope { PROJECT_ONLY, TARGET_ONLY, MERGED }` (default TARGET_ONLY)
     - `enum BuildSettingOrigin { PROJECT, TARGET }`
@@ -33,7 +33,7 @@ Behavior
 - Unknown configuration filters match nothing (no errors).
 
 Resolver
-- In `Sources/XcodeQueryKit/GraphQLSwiftResolvers.swift` add `XQResolvers.resolveTargetBuildSettings`:
+- In `Sources/XcodeQueryKit/XQResolvers.swift` add `XQResolvers.resolveTargetBuildSettings`:
   - Enumerate targets: `project.pbxproj.nativeTargets`.
   - For each target, collect "candidate configuration names":
     - `TARGET_ONLY`: target’s own configuration names.
@@ -59,7 +59,7 @@ Implementation Notes
   - `mergeSettings(project: [String: Any], target: [String: Any]) -> (merged: [String: Any], originByKey: [String: BuildSettingOrigin])`
 
 Tests (must cover everything)
-- Resolver tests in `Tests/XcodeQueryKitTests/GraphQLSwiftResolverTests.swift`:
+- Resolver tests in `Tests/XcodeQueryKitTests/GraphQLResolverTests.swift`:
   - Default TARGET_ONLY path returns rows across all target configurations; verify subset for a specific target.
   - Filters:
     - `target.eq` limits to one target.

@@ -1,7 +1,7 @@
 # M6-01 Phase 0 — Baseline Fidelity Freeze
 
 Goal
-- Capture the current GraphQL surface, inputs, and outputs so that the GraphQLSwift migration can prove behavioral parity.
+- Capture the current GraphQL surface, inputs, and outputs so that the GraphQL runtime migration can prove behavioral parity.
 
 Context
 - The bespoke parser/executor is still the single source of truth; we need durable documentation and tests before replacing it.

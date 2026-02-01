@@ -3,14 +3,14 @@ import XCTest
 
 final class SchemaAdapterTests: XCTestCase {
     func testTopLevelFieldNamesMatchStaticModel() throws {
-        let built = try XQSchemaBuilder.fromGraphQLSwift()
-        let gql = try XQGraphQLSwiftSchema.makeSchema()
+        let built = try XQSchemaBuilder.fromGraphQLRuntime()
+        let gql = try XQGraphQLSchema.makeSchema()
         let gqlTop = Set(gql.queryType.fields.map { (k, _) in k })
         XCTAssertEqual(Set(built.topLevel.map { $0.name }), gqlTop)
     }
 
     func testRepresentativeDefaultsAndTypes() throws {
-        let schema = try XQSchemaBuilder.fromGraphQLSwift()
+        let schema = try XQSchemaBuilder.fromGraphQLRuntime()
         func field(_ name: String) -> XQField? { schema.topLevel.first { $0.name == name } }
 
         // dependencies(name!, recursive=false, filter): [Target!]!
@@ -38,7 +38,7 @@ final class SchemaAdapterTests: XCTestCase {
     }
 
     func testEnumsAndInputsContainExpected() throws {
-        let schema = try XQSchemaBuilder.fromGraphQLSwift()
+        let schema = try XQSchemaBuilder.fromGraphQLRuntime()
         let enums = Dictionary(uniqueKeysWithValues: schema.enums.map { ($0.name, $0) })
         let inputs = Dictionary(uniqueKeysWithValues: schema.inputs.map { ($0.name, $0) })
 

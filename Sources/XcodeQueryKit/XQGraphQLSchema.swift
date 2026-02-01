@@ -1,9 +1,8 @@
 import Foundation
-import GraphQL
 
-// Phase 1: GraphQLSwift schema definition mirroring the frozen baseline.
+// Phase 1: GraphQL runtime schema definition mirroring the frozen baseline.
 // Execution/resolvers are added in later phases; here we only define types/fields/args.
-enum XQGraphQLSwiftSchema {
+enum XQGraphQLSchema {
     static func makeSchema() throws -> GraphQLSchema {
         // MARK: Scalars
         let string = GraphQLString

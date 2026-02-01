@@ -1,7 +1,5 @@
 import Foundation
 import XcodeProj
-@preconcurrency import GraphQL
-import NIO
 
 public class XcodeProjectQuery {
     public enum Error: Swift.Error { case invalidQuery(String) }
@@ -18,13 +16,13 @@ public class XcodeProjectQuery {
         guard !trimmed.hasPrefix("{") else {
             throw Error.invalidQuery("Top-level braces are not supported. Write selection only, e.g., targets { name type }")
         }
-        let value = try evaluateWithGraphQLSwift(selection: trimmed)
+        let value = try evaluateWithGraphQLRuntime(selection: trimmed)
         return AnyEncodable(value)
     }
 
-    // MARK: - GraphQLSwift execution path
-    private func evaluateWithGraphQLSwift(selection: String) throws -> JSONValue {
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+    // MARK: - GraphQLRuntime execution path
+    private func evaluateWithGraphQLRuntime(selection: String) throws -> JSONValue {
+        let schema = try XQGraphQLSchema.makeSchema()
         let proj = try XcodeProj(pathString: projectPath)
         let ctx = XQGQLContext(project: proj, projectPath: projectPath)
         let request = "{" + selection + "}"
@@ -114,7 +112,7 @@ extension JSONValue {
         case .bool(let b):
             self = .bool(b)
         case .number(let num):
-            self = .number(num.doubleValue)
+            self = .number(num)
         case .string(let s):
             self = .string(s)
         case .array(let arr):

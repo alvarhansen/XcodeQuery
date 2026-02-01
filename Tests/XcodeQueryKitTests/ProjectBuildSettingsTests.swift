@@ -1,12 +1,10 @@
 import XCTest
-@preconcurrency import GraphQL
-import NIO
 import XcodeProj
 @testable import XcodeQueryKit
 
 final class ProjectBuildSettingsTests: XCTestCase {
     func testSchemaIncludesProjectBuildSettingsAndFilter() throws {
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let query = schema.queryType
         guard let field = query.fields["projectBuildSettings"] else { return XCTFail("Missing projectBuildSettings field") }
         // One arg: filter
@@ -24,7 +22,7 @@ final class ProjectBuildSettingsTests: XCTestCase {
 
     func testProjectBuildSettingsAllConfigsAndFilter() throws {
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
 

@@ -10,13 +10,13 @@ Scope
 - Resolver collects configuration names from both project-level and target-level build configuration lists.
 
 Deliverables
-- Schema: add `buildConfigurations: [String!]!` to `Query` in `Sources/XcodeQueryKit/GraphQLSwiftSchema.swift`.
-- Resolver: implement `XQResolvers.resolveBuildConfigurations` in `Sources/XcodeQueryKit/GraphQLSwiftResolvers.swift`.
+- Schema: add `buildConfigurations: [String!]!` to `Query` in `Sources/XcodeQueryKit/XQGraphQLSchema.swift`.
+- Resolver: implement `XQResolvers.resolveBuildConfigurations` in `Sources/XcodeQueryKit/XQResolvers.swift`.
   - Enumerate `project.pbxproj.buildConfigurationList?.buildConfigurations.map(\.name)` and union with names from each `PBXNativeTarget.buildConfigurationList?.buildConfigurations`.
   - Return a deduplicated, alphabetically sorted array of names.
 - Tests (must cover everything):
-  - Add a resolver test in `Tests/XcodeQueryKitTests/GraphQLSwiftResolverTests.swift` executing `buildConfigurations` against the fixture project; assert the returned set and sort order.
-  - Add a schema/adapter test in `Tests/XcodeQueryKitTests/SchemaAdapterTests.swift` (or a new test file) that verifies the field exists on the query root via `XQSchemaBuilder.fromGraphQLSwift()`.
+  - Add a resolver test in `Tests/XcodeQueryKitTests/GraphQLResolverTests.swift` executing `buildConfigurations` against the fixture project; assert the returned set and sort order.
+  - Add a schema/adapter test in `Tests/XcodeQueryKitTests/SchemaAdapterTests.swift` (or a new test file) that verifies the field exists on the query root via `XQSchemaBuilder.fromGraphQLRuntime()`.
 
 Acceptance Criteria
 - `graphql(schema:..., request: "buildConfigurations", ...)` returns a JSON array of strings, unique and sorted.

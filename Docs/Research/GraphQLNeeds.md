@@ -3,16 +3,16 @@
 Date: 2026-02-01
 
 ## Overview
-XcodeQuery’s CLI is built around a GraphQL-style selection language. The current implementation uses the GraphQLSwift `GraphQL` package for both:
+XcodeQuery’s CLI is built around a GraphQL-style selection language. The current implementation uses the internal GraphQL runtime for both:
 - **Runtime query parsing/execution** (evaluate queries against an `XcodeProj` instance).
 - **Schema introspection** (SchemaCommand + autocomplete model generation).
 
-The CLI only accepts a **selection set** (no top-level braces). The code wraps the input in `{ ... }` and hands it to the GraphQLSwift executor.
+The CLI only accepts a **selection set** (no top-level braces). The code wraps the input in `{ ... }` and hands it to the internal runtime executor.
 
 Key entry points:
 - `query` command -> `XcodeProjectQuery.evaluate(query:)` -> `graphql(...)`.
 - `interactive` command -> `XcodeProjectQuerySession.evaluate(query:)` -> `graphql(...)`.
-- `schema` command + `CompletionProvider` -> `XQSchemaBuilder.fromGraphQLSwift()` -> introspects `GraphQLSchema`.
+- `schema` command + `CompletionProvider` -> `XQSchemaBuilder.fromGraphQLRuntime()` -> introspects `GraphQLSchema`.
 
 Sources: `Sources/XcodeQueryKit/XcodeProjectQuery.swift`, `Sources/XcodeQueryKit/XcodeProjectQuerySession.swift`, `Sources/XcodeQueryKit/XQSchemaBuilder.swift`, `Sources/XcodeQueryCLI/QueryCommand.swift`, `Sources/XcodeQueryCLI/InteractiveSession.swift`, `Sources/XcodeQueryCLI/SchemaCommand.swift`, `Sources/XcodeQueryCLI/CompletionProvider.swift`.
 
@@ -20,9 +20,9 @@ Sources: `Sources/XcodeQueryKit/XcodeProjectQuery.swift`, `Sources/XcodeQueryKit
 
 ### 1) Execution/Parsing
 Used directly in:
-- `XcodeProjectQuery.evaluateWithGraphQLSwift(...)`
-- `XcodeProjectQuerySession.evaluateWithGraphQLSwift(...)`
-- `Tests/XcodeQueryKitTests/GraphQLSwiftResolverTests.swift`
+- `XcodeProjectQuery.evaluateWithGraphQLRuntime(...)`
+- `XcodeProjectQuerySession.evaluateWithGraphQLRuntime(...)`
+- `Tests/XcodeQueryKitTests/GraphQLResolverTests.swift`
 
 Required API surface:
 - `graphql(schema:request:context:eventLoopGroup)` executor.
@@ -34,7 +34,7 @@ Required API surface:
   - `.isNull`, `.isUndefined`.
 
 ### 2) Type System / Schema Construction
-Used in `Sources/XcodeQueryKit/GraphQLSwiftSchema.swift`.
+Used in `Sources/XcodeQueryKit/XQGraphQLSchema.swift`.
 
 Constructed types:
 - `GraphQLSchema`
@@ -57,25 +57,20 @@ Required API surface:
 - Default value formatting based on `Map` (bool/string/int/double).
 
 ### 4) Resolver Signatures
-Used heavily in `Sources/XcodeQueryKit/GraphQLSwiftResolvers.swift`.
+Used heavily in `Sources/XcodeQueryKit/XQResolvers.swift`.
 
 Required API surface:
 - Resolver signature inputs: `(source: Any, args: Map, context: Any, info: GraphQLResolveInfo)`.
-- Ability to return Swift arrays/structs/strings that GraphQLSwift serializes.
+- Ability to return Swift arrays/structs/strings that GraphQL runtime serializes.
 - `GraphQLFieldResolveInput` (closure type) for resolver factories.
 - `GraphQLError` for custom execution errors.
 
-### 5) NIO Event Loop Integration
-Execution uses NIO:
-- `MultiThreadedEventLoopGroup(numberOfThreads: 1)` in both `XcodeProjectQuery` and tests.
-
-Any replacement runtime should either:
-- Offer an equivalent synchronous API, or
-- Provide a simple event loop abstraction (current code uses `wait()` on the future).
+### 5) Event Loop Shape
+Execution preserves the `graphql(..., eventLoopGroup:)` API shape with a lightweight, synchronous `EventLoopGroup` stub.
 
 ## Query Surface Actually Exposed (Current Runtime Schema)
 
-The **actual** schema comes from `GraphQLSwiftSchema.swift`, which is larger than the baseline doc. Top-level fields include:
+The **actual** schema comes from `XQGraphQLSchema.swift`, which is larger than the baseline doc. Top-level fields include:
 - `buildConfigurations`
 - `projectBuildSettings(filter: ProjectBuildSettingFilter)`
 - `targetBuildSettings(scope: BuildSettingsScope = TARGET_ONLY, filter: BuildSettingFilter)`
@@ -121,7 +116,7 @@ Sources: `Tests/XcodeQueryKitTests/GraphQLErrorTests.swift`, `Docs/Schema/Baseli
 
 ## Output/Encoding Expectations
 - Query results are serialized to JSON via `JSONEncoder`.
-- Execution output uses GraphQLSwift’s `Map` -> bridged into `JSONValue`.
+- Execution output uses the internal runtime’s `Map` -> bridged into `JSONValue`.
 - Tests include **snapshot comparisons** with sorted keys for stable output.
 
 Sources: `Sources/XcodeQueryKit/XcodeProjectQuery.swift`, `Tests/XcodeQueryKitTests/Support/GraphQLBaselineFixture.swift`, `Tests/XcodeQueryKitTests/Snapshots/GraphQLBaseline/*`.
@@ -133,7 +128,7 @@ These GraphQL features are not part of the current CLI surface:
 - Fragment definitions (not referenced by tests or CLI).
 - GraphQL introspection queries (schema is rendered via custom model, not runtime introspection queries).
 
-## Implications (If Replacing GraphQLSwift)
+## Implications (If Replacing the Runtime)
 Any replacement must provide at least:
 - A parser for GraphQL selection sets with arguments, input objects, enums, and strings.
 - Validation for selection sets and required arguments with similar error strings.

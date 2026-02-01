@@ -4,7 +4,7 @@ Goal: Introduce schema surface for packages, products, and requirement types. No
 
 ## Deliverables
 
-- GraphQLSwift types/enums/inputs for:
+- GraphQL runtime types/enums/inputs for:
   - `SwiftPackage`, `PackageRequirement`, `PackageProduct`, `PackageConsumer`, `PackageProductUsage`.
   - `RequirementKind`, `PackageProductType` enums.
   - Filters: `SwiftPackageFilter`, `PackageProductFilter`, `PackageProductUsageFilter`.

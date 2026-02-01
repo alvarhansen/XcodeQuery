@@ -1,10 +1,9 @@
 import XCTest
-@preconcurrency import GraphQL
 @testable import XcodeQueryKit
 
 final class LinkerDependenciesSchemaTests: XCTestCase {
     func testSchemaIncludesLinkerDependenciesTypesAndFields() throws {
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
 
         // Enums and inputs
         XCTAssertNotNil(schema.getType(name: "LinkKind") as? GraphQLEnumType)

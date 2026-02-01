@@ -1,10 +1,9 @@
 import XCTest
-@preconcurrency import GraphQL
 @testable import XcodeQueryKit
 
 final class SchemesSchemaTests: XCTestCase {
     func testSchemaIncludesSchemesTypesAndFields() throws {
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let query = schema.queryType
         XCTAssertNotNil(query.fields["schemes"])
         XCTAssertNotNil(schema.getType(name: "Scheme") as? GraphQLObjectType)

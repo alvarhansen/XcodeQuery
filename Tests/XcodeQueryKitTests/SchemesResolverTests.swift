@@ -1,13 +1,11 @@
 import XCTest
-@preconcurrency import GraphQL
-import NIO
 @testable import XcodeQueryKit
 
 final class SchemesResolverTests: XCTestCase {
     func testListSchemesAndFilters() throws {
         let fx = try SchemesFixture()
         let ctx = try fx.makeContext()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
 

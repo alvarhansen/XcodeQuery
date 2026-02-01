@@ -1,10 +1,9 @@
 import XCTest
 @testable import XcodeQueryKit
-@preconcurrency import GraphQL
 
 final class SwiftPackagesSchemaTests: XCTestCase {
     func testSchemaIncludesSwiftPackagesTypesAndFields() throws {
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let query = schema.queryType
 
         // Top-level fields

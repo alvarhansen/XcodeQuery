@@ -151,7 +151,7 @@ public struct SchemaCommand: AsyncParsableCommand {
 
         // Top-level fields
         out.append(Cx.b("Top-level fields (selection required):"))
-        let model: XQSchema = try! XQSchemaBuilder.fromGraphQLSwift()
+        let model: XQSchema = try! XQSchemaBuilder.fromGraphQLRuntime()
 
         for f in model.topLevel {
             out.append("- " + Cx.s(f.name, Cx.green) + formatArgs(f.args, Cx) + Cx.d(": ") + Cx.s(render(f.type), Cx.cyan))

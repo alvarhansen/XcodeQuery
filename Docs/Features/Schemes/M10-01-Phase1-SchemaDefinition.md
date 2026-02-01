@@ -4,7 +4,7 @@ Goal: Add root `schemes` field, types, and filter input.
 
 ## Deliverables
 
-- GraphQLSwift additions:
+- GraphQL runtime additions:
   - `schemes(filter: SchemeFilter): [Scheme!]!`
   - `Scheme`, `SchemeRef` types
   - `SchemeFilter` input

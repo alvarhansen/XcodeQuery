@@ -58,7 +58,7 @@ Out of Scope (initial)
 
 Implementation Plan
 1) Schema additions (XcodeQueryKit)
-   - Extend `Sources/XcodeQueryKit/GraphQLSwiftSchema.swift` with:
+   - Extend `Sources/XcodeQueryKit/XQGraphQLSchema.swift` with:
      - `BuildSettingsScope` enum (default TARGET_ONLY), `BuildSettingOrigin` enum.
      - Inputs: `BuildSettingFilter` (add `configuration`), `ProjectBuildSettingFilter` (add `configuration`).
      - Objects: `BuildSetting`, `TargetBuildSetting`, `ProjectBuildSetting`.

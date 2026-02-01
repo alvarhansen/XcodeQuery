@@ -10,7 +10,7 @@ struct CompletionProvider {
     private let inputsByName: [String: XQInputObjectType]
 
     init(schema: XQSchema? = nil) {
-        let resolved = schema ?? (try! XQSchemaBuilder.fromGraphQLSwift())
+        let resolved = schema ?? (try! XQSchemaBuilder.fromGraphQLRuntime())
         self.schema = resolved
         self.typesByName = Dictionary(uniqueKeysWithValues: resolved.types.map { ($0.name, $0) })
         self.inputsByName = Dictionary(uniqueKeysWithValues: resolved.inputs.map { ($0.name, $0) })

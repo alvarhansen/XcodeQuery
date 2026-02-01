@@ -68,7 +68,7 @@ Inputs
 
 ## Implementation Tasks
 
-1) Schema types and inputs (GraphQLSwift)
+1) Schema types and inputs (GraphQL runtime)
 2) Resolver layer for packages/products/consumers
 3) Add target field and flat view (usage)
 4) Tests (unit + snapshot where useful)

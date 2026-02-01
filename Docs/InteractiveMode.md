@@ -58,7 +58,7 @@ Aliases: `interactive` → `i`.
   - On exit, restore terminal state even on error (defer blocks).
 
 3) XcodeProjectQuerySession (Kit)
-- New type in `XcodeQueryKit` that encapsulates a single loaded `XcodeProj` and GraphQL-backed engine (GraphQLSwift) for repeated, fast evaluations.
+- New type in `XcodeQueryKit` that encapsulates a single loaded `XcodeProj` and GraphQL-backed engine (GraphQL runtime) for repeated, fast evaluations.
 - API sketch:
   - `init(projectPath: String) throws` loads `XcodeProj` once.
   - `func evaluate(query: String) throws -> AnyEncodable` (same semantics as today but reuses the in-memory project).
@@ -66,12 +66,12 @@ Aliases: `interactive` → `i`.
 - This avoids reloading the `.xcodeproj` for each keystroke, enabling sub-100ms evaluations for small queries.
 
 4) Schema Introspection Surface (Kit)
-- Use the GraphQLSwift runtime schema as the source of truth, adapted into a lightweight model via `XQSchemaBuilder`:
+- Use the GraphQL runtime schema as the source of truth, adapted into a lightweight model via `XQSchemaBuilder`:
   - Top-level fields, their arguments (name, type, defaults), and return types.
   - Nested fields for object types (Target, Source, Resource, BuildScript, etc.).
 - Goals:
   - Drive both `SchemaCommand` rendering and autocomplete from a single source of truth (the runtime schema).
-  - Keep the adapter small and deterministic; no runtime reflection beyond GraphQLSwift’s types.
+  - Keep the adapter small and deterministic; no runtime reflection beyond GraphQL runtime’s types.
 
 ## Evaluation Pipeline (InteractiveSession)
 

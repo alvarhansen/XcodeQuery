@@ -14,7 +14,7 @@ Requirements
 Instructions
 - Implement a new type (class or actor):
   - `init(projectPath: String) throws` — loads `XcodeProj` once and stores `projectPath`.
-  - `func evaluate(query: String) throws -> AnyEncodable` — trims, rejects leading `{`, executes via GraphQLSwift with the loaded project and stored path, returns `AnyEncodable`.
+  - `func evaluate(query: String) throws -> AnyEncodable` — trims, rejects leading `{`, executes via GraphQL runtime with the loaded project and stored path, returns `AnyEncodable`.
 - Consider making it an `actor` to serialize access if you observe thread-safety issues; otherwise a class is fine for M1.
 - Preserve existing query semantics.
 

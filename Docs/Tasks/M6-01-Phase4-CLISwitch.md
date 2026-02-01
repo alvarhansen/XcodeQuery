@@ -1,17 +1,20 @@
 # M6-01 Phase 4 — CLI Flip and Fallback Strategy
 
+Status
+- Completed; internal runtime is the default execution path and the legacy fallback has been removed (2026-02-01).
+
 Goal
-- Make GraphQLSwift the default execution path for the CLI while retaining a temporary fallback to the legacy parser for emergency rollbacks.
+- Make GraphQL runtime the default execution path for the CLI while retaining a temporary fallback to the legacy parser for emergency rollbacks.
 
 Context
-- After parity validation, the next milestone is switching user-facing execution to GraphQLSwift without disrupting workflows.
+- After parity validation, the next milestone is switching user-facing execution to GraphQL runtime without disrupting workflows.
 
 Tasks
-- Update `GraphQL.parseAndExecute` (and related entry points) to route queries through GraphQLSwift by default.
+- Update `GraphQL.parseAndExecute` (and related entry points) to route queries through GraphQL runtime by default.
 - Retain the legacy parser behind a hidden flag or build toggle with telemetry/logging to detect if it is invoked.
-- Refresh CLI integration tests to expect GraphQLSwift error messaging and ensure output snapshots still match Phase 0 baselines.
-- Update documentation (README, Docs/Tasks, release notes draft) to note the new dependency and runtime behavior.
-- Coordinate with release/CI owners to ensure binary distribution includes the GraphQLSwift runtime artifacts.
+- Refresh CLI integration tests to expect GraphQL runtime error messaging and ensure output snapshots still match Phase 0 baselines.
+- Update documentation (README, Docs/Tasks, release notes draft) to note the internal runtime behavior.
+- Coordinate with release/CI owners to ensure binary distribution includes the GraphQL runtime artifacts.
 
 Deliverables
 - Code changes flipping the default execution path.

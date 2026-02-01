@@ -1,7 +1,5 @@
 import Foundation
 import XcodeProj
-@preconcurrency import GraphQL
-import NIO
 
 public final class XcodeProjectQuerySession {
     public enum Error: Swift.Error { case invalidQuery(String) }
@@ -19,13 +17,13 @@ public final class XcodeProjectQuerySession {
         guard !trimmed.hasPrefix("{") else {
             throw Error.invalidQuery("Top-level braces are not supported. Write selection only, e.g., targets { name type }")
         }
-        // GraphQLSwift-only execution
-        let swift = try evaluateWithGraphQLSwift(selection: trimmed)
+        // GraphQLRuntime-only execution
+        let swift = try evaluateWithGraphQLRuntime(selection: trimmed)
         return AnyEncodable(swift)
     }
 
-    private func evaluateWithGraphQLSwift(selection: String) throws -> JSONValue {
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+    private func evaluateWithGraphQLRuntime(selection: String) throws -> JSONValue {
+        let schema = try XQGraphQLSchema.makeSchema()
         let ctx = XQGQLContext(project: project, projectPath: projectPath)
         let request = "{" + selection + "}"
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)

@@ -5,7 +5,7 @@ Goal: Add XCTest coverage for schema presence, resolver correctness, filters, an
 ## Test Matrix
 
 - Schema presence
-  - Assert `XQSchemaBuilder.fromGraphQLSwift()` includes new types/inputs/enums.
+  - Assert `XQSchemaBuilder.fromGraphQLRuntime()` includes new types/inputs/enums.
 - Integration fixture (XcodeGen)
   - Project with two packages: A (library product ACore), B (library product BUI and executable BTool).
   - Targets: App uses ACore+BUI; Tool uses BTool; Tests uses ACore only.

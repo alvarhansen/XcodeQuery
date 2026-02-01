@@ -1,6 +1,4 @@
 import XCTest
-@preconcurrency import GraphQL
-import NIO
 import XcodeProj
 @testable import XcodeQueryKit
 
@@ -9,7 +7,7 @@ final class LinkerDependenciesResolverTests: XCTestCase {
         let fixture = try LinkerDependenciesFixture()
 
         // Build schema and context
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
 

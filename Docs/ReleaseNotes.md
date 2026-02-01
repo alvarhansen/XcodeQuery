@@ -1,6 +1,6 @@
 # Release Notes
 
-## v0.1.0 — Build Settings Queries, GraphQLSwift baseline
+## v0.1.0 — Build Settings Queries, GraphQL runtime baseline
 
 New
 - Build configurations query
@@ -17,16 +17,16 @@ New
 
 Improvements
 - Schema source of truth
-  - SchemaCommand renders from GraphQLSwift runtime schema via `XQSchemaBuilder`. CompletionProvider consumes the same model.
+  - SchemaCommand renders from GraphQL runtime schema via `XQSchemaBuilder`. CompletionProvider consumes the same model.
   - Deterministic alphabetical ordering in sections.
-- GraphQLSwift execution only
-  - Legacy parser/AST/executor removed. Error messages now originate from GraphQLSwift.
+- GraphQL runtime execution only
+  - Legacy parser/AST/executor removed. Error messages now originate from GraphQL runtime.
 
 Docs
 - Updated schema baseline and README with new fields, filters, and examples.
 
 Migration notes
-- If tooling referenced internal legacy types (e.g., `GQLError`, `GraphQLExecutor`), migrate to `XQGraphQLSwiftSchema` and `XQResolvers`.
+- If tooling referenced internal legacy types (e.g., `GQLError`, `GraphQLExecutor`), migrate to `XQGraphQLSchema` and `XQResolvers`.
 - Regex arguments in queries must be properly escaped for GraphQL strings (e.g., `\"\\.swift$\"`).
 
 ## Unreleased

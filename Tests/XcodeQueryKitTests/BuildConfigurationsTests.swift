@@ -1,12 +1,10 @@
 import XCTest
-@preconcurrency import GraphQL
-import NIO
 import XcodeProj
 @testable import XcodeQueryKit
 
 final class BuildConfigurationsTests: XCTestCase {
     func testSchemaExposesBuildConfigurationsField() throws {
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let query = schema.queryType
         XCTAssertNotNil(query.fields["buildConfigurations"], "Query should expose buildConfigurations field")
     }
@@ -14,7 +12,7 @@ final class BuildConfigurationsTests: XCTestCase {
     func testResolverReturnsUniqueSortedConfigurations() throws {
         // Arrange
         let fixture = try GraphQLBaselineFixture()
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+        let schema = try XQGraphQLSchema.makeSchema()
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         defer { try? group.syncShutdownGracefully() }
 

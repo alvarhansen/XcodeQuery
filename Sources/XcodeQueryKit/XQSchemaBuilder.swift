@@ -1,9 +1,8 @@
 import Foundation
-import GraphQL
 
 public enum XQSchemaBuilder {
-    public static func fromGraphQLSwift() throws -> XQSchema {
-        let schema = try XQGraphQLSwiftSchema.makeSchema()
+    public static func fromGraphQLRuntime() throws -> XQSchema {
+        let schema = try XQGraphQLSchema.makeSchema()
         return try fromGraphQLSchema(schema)
     }
 

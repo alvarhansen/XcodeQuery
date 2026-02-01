@@ -4,7 +4,7 @@ Goal: Add schema for link dependencies at target level and flat view, with filte
 
 ## Deliverables
 
-- GraphQLSwift additions:
+- GraphQL runtime additions:
   - `LinkKind` enum, `LinkDependency`, `TargetLinkDependency` types
   - `LinkFilter` input
   - Target field `linkDependencies(...)`

@@ -1,19 +1,19 @@
-# M7-01 — Drive SchemaCommand from GraphQLSwift Schema
+# M7-01 — Drive SchemaCommand from GraphQL runtime Schema
 
 Context
 - Today, `SchemaCommand` renders from a static model `XcodeQuerySchema.schema` (Kit) and pretty-prints it (CLI).
-- We also define the executable GraphQL schema in `XQGraphQLSwiftSchema.makeSchema()` (Kit) for query execution.
+- We also define the executable GraphQL schema in `XQGraphQLSchema.makeSchema()` (Kit) for query execution.
 - Maintaining both introduces duplication and drift risk. It’s acceptable for the CLI output to change slightly if it enables a cleaner, reusable pipeline.
 
 Goals
-- Use the GraphQLSwift schema as the single source of truth for the `schema` command.
-- Remove ad‑hoc duplication across the static schema and GraphQLSwift runtime schema.
+- Use the GraphQL runtime schema as the single source of truth for the `schema` command.
+- Remove ad‑hoc duplication across the static schema and GraphQL runtime schema.
 - Produce a reusable in‑memory model suitable for both rendering and interactive completions.
 
 Approach
-1) Add adapter: GraphQLSwift → XQSchema
+1) Add adapter: GraphQL runtime → XQSchema
    - Implement `XQSchemaBuilder.from(graphQL: GraphQLSchema) -> XQSchema` in `XcodeQueryKit`.
-   - Traverse the GraphQLSwift `GraphQLSchema` returned by `XQGraphQLSwiftSchema.makeSchema()` and build:
+   - Traverse the GraphQL runtime `GraphQLSchema` returned by `XQGraphQLSchema.makeSchema()` and build:
      - `topLevel`: fields on the `Query` root as `[XQField]` with arguments + defaults and return types.
      - `types`: all object types except `Query` as `[XQObjectType]` with their fields and args.
      - `inputs`: all `GraphQLInputObjectType`s as `[XQInputObjectType]`.
@@ -28,13 +28,13 @@ Approach
      - Strings: quoted (e.g., `"App"`), escape inner quotes
 
 2) Migrate SchemaCommand to the adapter
-   - Build the GraphQL schema at runtime with `XQGraphQLSwiftSchema.makeSchema()`.
+   - Build the GraphQL schema at runtime with `XQGraphQLSchema.makeSchema()`.
    - Convert once via `XQSchemaBuilder` and feed the result to the existing renderer in `renderSchemaFromModel`.
    - Keep coloring and section layout; accept minor ordering/formatting changes where needed for deterministic, clean logic.
    - Optional safety lever: support `XCQ_SCHEMA_SOURCE=static` to render from `XcodeQuerySchema.schema` for emergency fallback during rollout.
 
 3) Deterministic ordering
-   - GraphQLSwift field collections may not guarantee insertion order. For stable output:
+   - GraphQL runtime field collections may not guarantee insertion order. For stable output:
      - Sort top‑level fields by name unless we explicitly impose a curated order.
      - Sort `types`, `inputs`, and `enums` by name.
      - Sort fields and input fields by name within each type.
@@ -45,8 +45,8 @@ Approach
    - After validating the adapter, consider injecting the adapter‑built schema into interactive mode so completions and `schema` render share one source of truth.
 
 Deliverables
-- `XQSchemaBuilder.swift` in Kit with GraphQLSwift→XQSchema conversion.
-- `SchemaCommand` updated to build from GraphQLSwift via the adapter (with optional static fallback via env var).
+- `XQSchemaBuilder.swift` in Kit with GraphQL runtime→XQSchema conversion.
+- `SchemaCommand` updated to build from GraphQL runtime via the adapter (with optional static fallback via env var).
 - Deterministic sorting in the adapter to stabilize output.
 
 Tests
@@ -59,12 +59,12 @@ Tests
 
 Acceptance Criteria
 - `swift build` and `swift test` pass on macOS.
-- `xcq schema` prints from GraphQLSwift via the adapter with stable, sorted sections.
+- `xcq schema` prints from GraphQL runtime via the adapter with stable, sorted sections.
 - Output remains readable and complete; minor ordering differences are acceptable.
 
 Rollout
 1. Land adapter + optional fallback env.
-2. Switch `SchemaCommand` default to GraphQLSwift adapter.
+2. Switch `SchemaCommand` default to GraphQL runtime adapter.
 3. Observe in CI; if stable, remove `XcodeQuerySchema.swift` and update `CompletionProvider` to consume the adapted schema.
 
 Risks & Mitigations

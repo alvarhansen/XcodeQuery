@@ -1,9 +1,7 @@
 import Foundation
-import GraphQL
-import OrderedCollections
 import XcodeProj
 
-// Adapter layer: GraphQLSwift resolvers backed by XcodeProj and logic mirroring GraphQLExecutor behavior.
+// Adapter layer: GraphQLRuntime resolvers backed by XcodeProj and logic mirroring GraphQLExecutor behavior.
 
 struct XQGQLContext {
     let project: XcodeProj
@@ -560,14 +558,14 @@ enum XQResolvers {
         return (String(describing: any), nil, false)
     }
 
-    private static func matchPBSFilter(configuration: String, key: String, filter: OrderedDictionary<String, Map>) -> Bool {
+    private static func matchPBSFilter(configuration: String, key: String, filter: [String: Map]) -> Bool {
         var ok = true
         if let cfg = filter["configuration"], !cfg.isUndefined, !cfg.isNull { ok = ok && matchString(configuration, value: cfg) }
         if let k = filter["key"], !k.isUndefined, !k.isNull { ok = ok && matchString(key, value: k) }
         return ok
     }
 
-    private static func matchTBSFilter(target: String, configuration: String, key: String, filter: OrderedDictionary<String, Map>) -> Bool {
+    private static func matchTBSFilter(target: String, configuration: String, key: String, filter: [String: Map]) -> Bool {
         var ok = true
         if let tgt = filter["target"], !tgt.isUndefined, !tgt.isNull { ok = ok && matchString(target, value: tgt) }
         if let cfg = filter["configuration"], !cfg.isUndefined, !cfg.isNull { ok = ok && matchString(configuration, value: cfg) }
@@ -885,7 +883,7 @@ enum XQResolvers {
         }
         return rows
     }
-    private static func matchTargetFilter(nt: PBXNativeTarget, filter: OrderedDictionary<String, Map>) -> Bool {
+    private static func matchTargetFilter(nt: PBXNativeTarget, filter: [String: Map]) -> Bool {
         let tname = nt.name
         let ttype = TargetType.from(productType: nt.productType)
         for (k, v) in filter {
@@ -899,7 +897,7 @@ enum XQResolvers {
         return true
     }
 
-    private static func matchBuildScript(_ s: BuildScriptEntry, obj: OrderedDictionary<String, Map>) -> Bool {
+    private static func matchBuildScript(_ s: BuildScriptEntry, obj: [String: Map]) -> Bool {
         for (k, v) in obj {
             if v.isUndefined || v.isNull { continue }
             switch k {
@@ -912,14 +910,14 @@ enum XQResolvers {
         return true
     }
 
-    private static func matchString(_ s: String, key: String = "", obj: OrderedDictionary<String, Map>) -> Bool {
+    private static func matchString(_ s: String, key: String = "", obj: [String: Map]) -> Bool {
         if let nested = obj[key] { return matchString(s, value: nested) }
         return matchString(s, value: .dictionary(obj))
     }
     private static func matchString(_ s: String, value: Map) -> Bool {
         guard case let .dictionary(o) = value else { return false }
         for (k, v) in o {
-            // Skip undefined/null entries injected by GraphQLSwift for absent input fields
+            // Skip undefined/null entries injected by GraphQLRuntime for absent input fields
             if v.isUndefined || v.isNull { continue }
             switch k {
             case "eq": if let val = v.string { if s != val { return false } } else { return false }
