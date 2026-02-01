@@ -1,3 +1,31 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:22a053b0c95651d007a770631f74ba365d6bb1c027c1cacf13ac6c74a46ba756
-size 1194
+FROM swift:6.2.3
+
+ARG WASI_SDK_TAG=22
+ARG WASI_SDK_VERSION=22.0
+ARG WASMTIME_VERSION=24.0.0
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    make \
+    xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -L -o /tmp/wasi-sdk.tar.gz \
+    https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_TAG}/wasi-sdk-${WASI_SDK_VERSION}-linux.tar.gz \
+    && tar -xzf /tmp/wasi-sdk.tar.gz -C /opt \
+    && ln -s /opt/wasi-sdk-${WASI_SDK_VERSION} /opt/wasi-sdk \
+    && rm /tmp/wasi-sdk.tar.gz
+
+RUN swift sdk install https://download.swift.org/swift-6.2.3-release/wasm-sdk/swift-6.2.3-RELEASE/swift-6.2.3-RELEASE_wasm.artifactbundle.tar.gz \
+    --checksum 394040ecd5260e68bb02f6c20aeede733b9b90702c2204e178f3e42413edad2a
+
+RUN curl -L -o /tmp/wasmtime.tar.xz \
+    https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz \
+    && tar -xJf /tmp/wasmtime.tar.xz -C /opt \
+    && ln -s /opt/wasmtime-v${WASMTIME_VERSION}-x86_64-linux/wasmtime /usr/local/bin/wasmtime \
+    && rm /tmp/wasmtime.tar.xz
+
+ENV WASI_SDK_PATH=/opt/wasi-sdk
+
+WORKDIR /work
