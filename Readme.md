@@ -4,6 +4,12 @@
 
 Xcode Query (xcq) uses a GraphQL-style query language for predictable, composable queries against your Xcode project. Results are JSON and shaped by your selection set.
 
+Highlights
+- Selection-only GraphQL-style queries with deterministic JSON output.
+- Interactive mode with live preview and completions.
+- Flat views for piping into jq.
+- WASM-powered web demo.
+
 ## Install via Homebrew
 
 - Recommended (tap):
@@ -17,6 +23,11 @@ After install, verify: `xcq --help`
 
 - Run against the project in the current directory: `xcq 'targets { name type }'`
 - Or specify a project: `xcq 'targets { name }' --project MyApp.xcodeproj`
+
+## Web Demo
+
+Try the browser demo (WASM runtime) here:
+- https://blog.hansen.ee/XcodeQuery/web/
 
 ### Interactive Mode
 
@@ -44,7 +55,7 @@ After install, verify: `xcq --help`
 
 ## Schema Overview
 
-SchemaCommand renders from the GraphQLSwift runtime schema (single source of truth).
+SchemaCommand renders from the internal GraphQL runtime schema (single source of truth).
 
 Top-level fields (selection required):
 - `targets(type: TargetType, filter: TargetFilter): [Target!]!`
