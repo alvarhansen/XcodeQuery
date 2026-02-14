@@ -1,209 +1,128 @@
-> Disclaimer: This tool was created using LLM-assisted tooling. Do not expect code readability or quality; there may be rough edges.
+# XcodeQuery
 
-# Xcode Query
+XcodeQuery (`xcq`) is a CLI for querying Xcode projects with a GraphQL-style selection language.
+It returns deterministic JSON shaped by your selection set.
 
-Xcode Query (xcq) uses a GraphQL-style query language for predictable, composable queries against your Xcode project. Results are JSON and shaped by your selection set.
+## Quick Start
 
-Highlights
-- Selection-only GraphQL-style queries with deterministic JSON output.
-- Interactive mode with live preview and completions.
-- Flat views for piping into jq.
-- WASM-powered web demo.
+1. Install:
+   - `brew tap alvarhansen/xcodequery`
+   - `brew install xcq`
+2. Run in a project directory containing an `.xcodeproj`:
+   - `xcq 'targets { name type }'`
+3. Or pass a project path explicitly:
+   - `xcq 'targets { name }' --project MyApp.xcodeproj`
 
-## Install via Homebrew
+Try the WASM demo: <https://blog.hansen.ee/XcodeQuery/web/>
 
-- Recommended (tap):
+## Install
+
+- Stable binary:
   - `brew tap alvarhansen/xcodequery`
-  - Stable (prebuilt binary): `brew install xcq`
-  - HEAD (build from source): `brew install --HEAD xcq`
+  - `brew install xcq`
+- HEAD build:
+  - `brew install --HEAD xcq`
 
-After install, verify: `xcq --help`
+Verify:
+- `xcq --help`
 
-## Usage
+## Interactive Mode
 
-- Run against the project in the current directory: `xcq 'targets { name type }'`
-- Or specify a project: `xcq 'targets { name }' --project MyApp.xcodeproj`
+Start:
+- `xcq interactive [--project PATH] [--debounce MS] [--color|--no-color]`
+- Alias: `xcq i`
 
-## Web Demo
+Behavior:
+- In TTY, interactive mode uses a TauTUI-based UI with a multiline editor and live preview.
+- Query evaluation is debounced (default `200ms`) and preview is always pretty JSON.
+- `Enter` inserts newline (Shift/Option/Command+Enter also work).
+- `ESC` or `Ctrl+C` exits.
+- In non-TTY mode (piped stdin), input is read line-by-line and each line is evaluated.
 
-Try the browser demo (WASM runtime) here:
-- https://blog.hansen.ee/XcodeQuery/web/
+Completions:
+- `Tab` shows suggestions.
+- `Up/Down` navigates suggestions.
+- `Enter` or `Tab` accepts suggestion.
+- Supports top-level fields, nested fields, input keys, and enum values.
 
-### Interactive Mode
+## Query Surface
 
-- Start interactive mode: `xcq interactive [--project PATH] [--debounce MS] [--color|--no-color]`
-- Behavior:
-  - On a TTY, runs a TauTUI-based interface with a live preview above a multiline editor.
-  - Evaluates your query as you type (debounced; default 200ms) and renders pretty JSON.
-  - Errors are shown inline in the preview area; press ESC or Ctrl+C to exit.
-  - Editor notes: `Enter` inserts a newline (also works with Shift/Option/Command+Enter).
-  - In non-TTY environments (e.g., piped input), reads line-by-line from stdin and prints pretty JSON.
-- Output is always pretty-printed JSON in interactive mode.
+Use `xcq schema` for the full generated schema.
 
-#### Completions
+High-value top-level fields:
+- Targets and graph:
+  - `targets`, `target`, `dependencies`, `dependents`, `targetDependencies`
+- Files and membership:
+  - `targetSources`, `targetResources`, `targetMembership`
+- Build and schemes:
+  - `schemes`, `targetBuildScripts`, `buildConfigurations`, `projectBuildSettings`, `targetBuildSettings`
+- Linking:
+  - `targetLinkDependencies`
+- Swift packages:
+  - `swiftPackages`, `targetPackageProducts`
 
-- Press Tab to show context-aware suggestions; Tab again hides the panel.
-- Up/Down navigates suggestions; Enter or Tab accepts the selected suggestion; ESC exits interactive mode.
-- Supported contexts (driven by the built-in schema):
-  - Top-level fields at root, object fields inside selections, and argument names inside `(...)`.
-  - Enum values for enum-typed arguments (e.g., `TargetType`, `ScriptStage`).
-  - Filter keys inside inputs: `TargetFilter` (`name`, `type`), `SourceFilter`/`ResourceFilter` (`path`, `target`), `BuildScriptFilter` (`stage`, `name`, `target`).
-  - Nested `StringMatch` keys: `eq`, `regex`, `prefix`, `suffix`, `contains`.
-- Examples (position cursor at `•` and press Tab):
-  - `targets(filter: { • }) { name }` → `name`, `type`
-  - `targets(filter: { type: • }) { name }` → `APP`, `FRAMEWORK`, …
-  - `targetResources(filter: { path: { • } }) { target path }` → `eq`, `regex`, `prefix`, `suffix`, `contains`
+Core enums and inputs you will use often:
+- Enums: `TargetType`, `PathMode`, `ScriptStage`, `BuildSettingsScope`, `BuildSettingOrigin`, `LinkKind`
+- Inputs: `TargetFilter`, `SourceFilter`, `ResourceFilter`, `BuildScriptFilter`, `BuildSettingFilter`, `StringMatch`
 
-## Schema Overview
+## Common Examples
 
-SchemaCommand renders from the internal GraphQL runtime schema (single source of truth).
+Targets:
+- `xcq 'targets { name type }'`
+- `xcq 'targets(type: UNIT_TEST) { name }'`
+- `xcq 'targets(filter: { name: { suffix: "Tests" } }) { name }'`
 
-Top-level fields (selection required):
-- `targets(type: TargetType, filter: TargetFilter): [Target!]!`
-- `target(name: String!): Target`
-- `dependencies(name: String!, recursive: Boolean = false, filter: TargetFilter): [Target!]!`
-- `dependents(name: String!, recursive: Boolean = false, filter: TargetFilter): [Target!]!`
-- Flat views:
-  - `targetSources(pathMode: PathMode = FILE_REF, filter: SourceFilter): [TargetSource!]!`
-  - `targetResources(pathMode: PathMode = FILE_REF, filter: ResourceFilter): [TargetResource!]!`
-  - `schemes(filter: SchemeFilter): [Scheme!]!`
-  - `targetLinkDependencies(filter: LinkFilter): [TargetLinkDependency!]!`
-  - `targetDependencies(recursive: Boolean = false, filter: TargetFilter): [TargetDependency!]!`
-  - `targetBuildScripts(filter: BuildScriptFilter): [TargetBuildScript!]!`
-  - `targetMembership(path: String!, pathMode: PathMode = FILE_REF): TargetMembership!`
-  - `buildConfigurations: [String!]!`
-  - `projectBuildSettings(filter: ProjectBuildSettingFilter): [ProjectBuildSetting!]!`
-  - `targetBuildSettings(scope: BuildSettingsScope = TARGET_ONLY, filter: BuildSettingFilter): [TargetBuildSetting!]!`
-  - Swift Packages:
-    - `swiftPackages(filter: SwiftPackageFilter): [SwiftPackage!]!`
-    - `targetPackageProducts(filter: PackageProductUsageFilter): [PackageProductUsage!]!`
+Dependencies:
+- `xcq 'dependencies(name: "App") { name type }'`
+- `xcq 'dependencies(name: "App", recursive: true) { name }'`
+- `xcq 'dependents(name: "Lib") { name }'`
 
-Types and inputs:
-- `type Target { name, type, dependencies(recursive, filter), sources(pathMode, filter), resources(pathMode, filter), linkDependencies(pathMode, filter), buildScripts(filter), buildSettings(scope, filter) }`
-- `type Scheme { name, isShared, buildTargets { name }, testTargets { name }, runTarget { name } }`
-- `type BuildScript { name, stage, inputPaths, outputPaths, inputFileListPaths, outputFileListPaths }`
-- Views: `TargetSource { target, path }`, `TargetResource { target, path }`, `TargetDependency { target, name, type }`, `TargetLinkDependency { target, name, kind, path, embed, weak }`, `TargetBuildScript { target, ... }`, `TargetMembership { path, targets }`
-- `enum TargetType { APP, FRAMEWORK, STATIC_LIBRARY, DYNAMIC_LIBRARY, UNIT_TEST, UI_TEST, EXTENSION, BUNDLE, COMMAND_LINE_TOOL, WATCH_APP, WATCH2_APP, TV_APP, OTHER }`
-- `enum PathMode { FILE_REF, ABSOLUTE, NORMALIZED }`
-- `enum ScriptStage { PRE, POST }`
-- `enum BuildSettingsScope { PROJECT_ONLY, TARGET_ONLY, MERGED }`
-- `enum BuildSettingOrigin { PROJECT, TARGET }`
- - `enum RequirementKind { EXACT, RANGE, UP_TO_NEXT_MAJOR, UP_TO_NEXT_MINOR, BRANCH, REVISION }`
- - `enum PackageProductType { LIBRARY, EXECUTABLE, PLUGIN, OTHER }`
- - `enum LinkKind { FRAMEWORK, LIBRARY, SDK_FRAMEWORK, SDK_LIBRARY, PACKAGE_PRODUCT, OTHER }`
-- Filters:
-  - `input TargetFilter { name: StringMatch, type: TargetType }`
-  - `input SourceFilter { path: StringMatch, target: StringMatch }`
-  - `input ResourceFilter { path: StringMatch, target: StringMatch }`
-  - `input BuildScriptFilter { stage: ScriptStage, name: StringMatch, target: StringMatch }`
-  - `input ProjectBuildSettingFilter { key: StringMatch, configuration: StringMatch }`
-  - `input BuildSettingFilter { key: StringMatch, configuration: StringMatch, target: StringMatch }`
-  - `input StringMatch { eq: String, regex: String, prefix: String, suffix: String, contains: String }`
-  - `input SwiftPackageFilter { name: StringMatch, identity: StringMatch, url: StringMatch, product: StringMatch, consumerTarget: StringMatch }`
-  - `input PackageProductFilter { name: StringMatch }`
- - `input PackageProductUsageFilter { target: StringMatch, package: StringMatch, product: StringMatch }`
-  - `input LinkFilter { name: StringMatch, kind: LinkKind, target: StringMatch }`
-  - `input SchemeFilter { name: StringMatch, includesTarget: StringMatch }`
+Sources and resources:
+- `xcq 'targets(type: FRAMEWORK) { name sources(pathMode: NORMALIZED, filter: { path: { regex: "\\.swift$" }}) { path } }'`
+- `xcq 'targetSources(pathMode: NORMALIZED) { target path }'`
+- `xcq 'targetResources { target path }'`
 
-Swift Packages types:
-- `type SwiftPackage { name, identity, url, requirement { kind, value }, products { name, type }, consumers { target, product } }`
-- `type PackageProductUsage { target, packageName, productName }`
+Build scripts:
+- `xcq 'targets(type: FRAMEWORK) { name buildScripts(filter: { stage: PRE }) { name stage inputPaths } }'`
+- `xcq 'targetBuildScripts(filter: { stage: PRE }) { target name stage }'`
 
-## Examples
+Schemes:
+- `xcq 'schemes { name isShared buildTargets { name } testTargets { name } runTarget { name } }'`
+- `xcq 'schemes(filter: { includesTarget: { eq: "App" } }) { name }'`
 
-- List targets and types:
-  - `xcq 'targets { name type }'`
+Build settings:
+- `xcq 'buildConfigurations'`
+- `xcq 'projectBuildSettings(filter: { key: { prefix: "SWIFT" } }) { configuration key value values isArray }'`
+- `xcq 'targetBuildSettings(filter: { configuration: { eq: "Release" }, key: { prefix: "CODE_SIGN" } }) { target configuration key value origin }'`
 
-- Unit test targets only:
-  - `xcq 'targets(type: UNIT_TEST) { name }'`
-
-- Targets with name ending in "Tests":
-  - `xcq 'targets(filter: { name: { suffix: "Tests" } }) { name }'`
-
-- Dependencies of a target:
-  - Direct: `xcq 'dependencies(name: "App") { name type }'`
-  - Transitive: `xcq 'dependencies(name: "App", recursive: true) { name }'`
-  - Reverse (who depends on): `xcq 'dependents(name: "Lib") { name }'`
-
-- Per-target dependencies (nested):
-  - `xcq 'targets(type: UNIT_TEST) { name dependencies(recursive: true) { name } }'`
-
-- Sources
-  - Nested, normalized Swift only:
-    - `xcq 'targets(type: FRAMEWORK) { name sources(pathMode: NORMALIZED, filter: { path: { regex: "\\.swift$" }}) { path } }'`
-  - Flat, normalized (easy to pipe):
-    - `xcq 'targetSources(pathMode: NORMALIZED) { target path }'`
-
-- Resources (Copy Bundle Resources)
-  - Per-target JSON resources:
-    - `xcq 'targets { name resources(filter: { path: { regex: "\\.json$" }}) { path } }'`
-  - Flat list, exact filename:
-    - `xcq 'targetResources { target path }' | jq '.targetResources | map(select(.path == "Info.plist"))'`
-
-- Build scripts
-  - Nested for frameworks, pre stage:
-    - `xcq 'targets(type: FRAMEWORK) { name buildScripts(filter: { stage: PRE }) { name stage inputPaths } }'`
-  - Flat with stage filter:
-    - `xcq 'targetBuildScripts(filter: { stage: PRE }) { target name stage }'`
-
-- Swift Packages
-  - List packages with requirements:
-    - `xcq 'swiftPackages { name identity url requirement { kind value } }'`
-  - Products consumed by a target:
-    - `xcq 'target(name: "App") { packageProducts { packageName productName } }'`
-  - Flat view for piping/grepping:
-    - `xcq 'targetPackageProducts { target packageName productName }'`
-  - Filter packages by consumer target:
-    - `xcq 'swiftPackages(filter: { consumerTarget: { eq: "App" } }) { name products { name } }'`
-
-- Linker inputs (frameworks/libraries/package products)
-  - Per-target, include embed/weak flags:
-    - `xcq 'target(name: "App") { linkDependencies(pathMode: NORMALIZED) { name kind path embed weak } }'`
-  - Flat view for piping and filters:
-    - `xcq 'targetLinkDependencies(filter: { kind: FRAMEWORK }) { target name kind embed }'`
-
-- Schemes
-  - List schemes with actions:
-    - `xcq 'schemes { name isShared buildTargets { name } testTargets { name } runTarget { name } }'`
-  - Filter by name prefix:
-    - `xcq 'schemes(filter: { name: { prefix: "App" } }) { name }'`
-  - Filter schemes that include a target:
-    - `xcq 'schemes(filter: { includesTarget: { eq: "App" } }) { name }'`
-
-- Target membership for a file
-  - `xcq 'targetMembership(path: "Shared/Shared.swift", pathMode: NORMALIZED) { path targets }'`
-
-- Build settings
-  - List configuration names:
-    - `xcq 'buildConfigurations'`
-  - Project-only SWIFT keys across all configs:
-    - `xcq 'projectBuildSettings(filter: { key: { prefix: "SWIFT" } }) { configuration key value values isArray }'`
-  - Flat per-target build settings (Release CODE_SIGN keys):
-    - `xcq 'targetBuildSettings(filter: { configuration: { eq: "Release" }, key: { prefix: "CODE_SIGN" } }) { target configuration key value origin }'`
-  - Nested per-target (merged App SWIFT values for Debug):
-    - `xcq 'target(name: "App") { buildSettings(scope: MERGED, filter: { configuration: { eq: "Debug" }, key: { prefix: "SWIFT" } }) { configuration key value values isArray origin } }'`
+Swift Packages:
+- `xcq 'swiftPackages { name identity url requirement { kind value } }'`
+- `xcq 'target(name: "App") { packageProducts { packageName productName } }'`
+- `xcq 'targetPackageProducts { target packageName productName }'`
 
 ## jq Recipes
 
-- Files used by multiple targets (normalized):
-  - `xcq 'targetSources(pathMode: NORMALIZED) { target path }' --project MyApp.xcodeproj | jq '.targetSources | group_by(.path) | map(select(length > 1) | { path: .[0].path, targets: map(.target) })'`
+Files used by multiple targets:
+- `xcq 'targetSources(pathMode: NORMALIZED) { target path }' --project MyApp.xcodeproj | jq '.targetSources | group_by(.path) | map(select(length > 1) | { path: .[0].path, targets: map(.target) })'`
 
-- Files not in any target (absolute):
-  - `find "$(pwd)" \( -name "*.swift" -o -name "*.m" -o -name "*.mm" -o -name "*.c" -o -name "*.cc" -o -name "*.cpp" \) -not -path "$(pwd)/.build/*" -not -path "$(pwd)/**/*.xcodeproj/*" -print0 | xargs -0 -n1 -I{} sh -c 'xcq "targetMembership(path: \"{}\", pathMode: ABSOLUTE) { path targets }" --project MyApp.xcodeproj' | jq -s '.[].targetMembership | select(.targets | length == 0)'`
+Files not in any target:
+- `find "$(pwd)" \( -name "*.swift" -o -name "*.m" -o -name "*.mm" -o -name "*.c" -o -name "*.cc" -o -name "*.cpp" \) -not -path "$(pwd)/.build/*" -not -path "$(pwd)/**/*.xcodeproj/*" -print0 | xargs -0 -n1 -I{} sh -c 'xcq "targetMembership(path: \"{}\", pathMode: ABSOLUTE) { path targets }" --project MyApp.xcodeproj' | jq -s '.[].targetMembership | select(.targets | length == 0)'`
 
 ## Notes
 
-- Path formatting is explicit via `pathMode` on fields or flat views. No global state.
-- Regex uses `NSRegularExpression` and is case‑sensitive.
-- Arrays are sorted by sensible defaults (names/paths) unless further ordering is added later.
+- Path output is explicit via `pathMode` (no global path mode state).
+- Regex filters use `NSRegularExpression` and are case-sensitive.
+- Arrays are sorted by stable defaults unless explicitly stated otherwise.
 
-## Releasing (maintainers)
+## Project Docs
 
-Releases are done locally (no CI automation). See `RELEASE.md` for the step‑by‑step process: tagging, building the zip, creating the GitHub release, and updating the Homebrew formula and tap.
+- Interactive mode spec: `Docs/InteractiveMode.md`
+- Schema docs: `Docs/Schema/README.md`
+- Feature plans/specs: `Docs/Features/`
+- Task plans: `Docs/Tasks/`
 
-## Homebrew Tap
+## Release (Maintainers)
 
-Once the `alvarhansen/homebrew-xcodequery` tap has the generated formula, users can install via:
-
-- `brew tap alvarhansen/xcodequery`
-- `brew install xcq`
+- Release process: `RELEASE.md`
+- Homebrew formula source: `HomebrewFormula/`
+- Tap repo: `alvarhansen/homebrew-xcodequery`
