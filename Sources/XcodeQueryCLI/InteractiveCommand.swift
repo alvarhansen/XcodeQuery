@@ -33,12 +33,12 @@ public struct InteractiveCommand: AsyncParsableCommand {
         let enableColor = noColor ? false : (yesColor || force || (isatty(STDOUT_FILENO) == 1))
 
         let isTTY = (isatty(STDIN_FILENO) == 1) && (isatty(STDOUT_FILENO) == 1)
+        let debounceMs = max(0, debounce)
         if isTTY {
-            let engine = InteractiveSession(core: session, debounceMs: max(0, debounce), colorEnabled: enableColor)
-            let last = try await engine.start()
-            if !last.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                print(last)
+            let engine = await MainActor.run {
+                TauInteractiveSession(core: session, debounceMs: debounceMs, colorEnabled: enableColor)
             }
+            try await engine.start()
         } else {
             try runNonTTY(core: session)
         }

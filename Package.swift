@@ -11,6 +11,7 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../XcodeProj"),
+        .package(path: "../TauTUI"),
         .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.6.1"),
         .package(url: "https://github.com/yonaskolb/XcodeGen.git", from: "2.41.0"),
     ],
@@ -26,6 +27,7 @@ let package = Package(
             name: "XcodeQueryCLI",
             dependencies: [
                 .target(name: "XcodeQueryKit"),
+                .product(name: "TauTUI", package: "TauTUI"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
